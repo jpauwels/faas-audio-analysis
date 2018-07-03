@@ -1,0 +1,43 @@
+provider:
+  name: faas
+  gateway: http://127.0.0.1:8080
+
+functions:
+  ac-analysis:
+    lang: python3
+    handler: ./ac-analysis
+    image: audiocommons/faas-ac-analysis
+    environment_file:
+     - env.yml
+    environment:
+      read_timeout: 330s
+      write_timeout: 330s
+      combine_output: false
+      write_debug: false
+  sonic-annotator:
+    lang: dockerfile
+    handler: ./sonic-annotator
+    image: audiocommons/faas-sonic-annotator
+    environment:
+      read_timeout: 300s
+      write_timeout: 300s
+      combine_output: false
+      write_debug: false
+  confident-chord-estimator:
+    lang: dockerfile
+    handler: ./confident-chord-estimator
+    image: audiocommons/faas-confident-chord-estimator
+    environment:
+      read_timeout: 300s
+      write_timeout: 300s
+      combine_output: false
+      write_debug: false
+  instrument-identifier:
+    lang: dockerfile
+    handler: ./instrument-identifier
+    image: audiocommons/faas-instrument-identifier
+    environment:
+      read_timeout: 300s
+      write_timeout: 300s
+      combine_output: false
+      write_debug: false
