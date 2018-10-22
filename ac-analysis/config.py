@@ -1,10 +1,14 @@
+import requests
+import os
+
 providers = ['jamendo', 'freesound', 'europeana']
 
 def audio_uri(file_id, provider):
     if provider == 'jamendo':
         return 'https://flac.jamendo.com/download/track/{}/flac'.format(file_id)
     elif provider == 'freesound':
-        return 'http://freesound.org/data/previews/{id:.3}/{id}-hq.ogg'.format(id=file_id)
+        r = requests.get('https://freesound.org/apiv2/sounds/{id}/'.format(id=file_id), params={'token': os.getenv('FREESOUND_API_KEY'), 'fields': 'previews'})
+        return r.json()['previews']['preview-hq-ogg']
     elif provider == 'europeana':
         return 'http://{}'.format(file_id)
     else:
