@@ -1,3 +1,4 @@
 environment:
   MONGO_CONNECTION: mongodb://localhost:27017/test
   FREESOUND_API_KEY: secret-string
+  EUROPEANA_API_KEY: another-secret-string
