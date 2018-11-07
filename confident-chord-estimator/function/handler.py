@@ -42,6 +42,7 @@ class MadMomDeepChromaExtractor:
         self.step_size = step_size
         if samplerate != 44100 or frame_size != 8192 or step_size != 4410:
             raise ValueError('Parameter values not supported')
+        self.frame_cutter = madmom.audio.FramedSignalProcessor(frame_size=frame_size, hop_size=step_size)
         self.extractor = madmom.audio.chroma.DeepChromaProcessor(num_channels=1)
     
     def get_frame_times(self, chromagram):
@@ -49,11 +50,13 @@ class MadMomDeepChromaExtractor:
         return start_times, start_times+self.frame_size/self.samplerate
 
     def __call__(self, audiopath):
-        signal = madmom.audio.Signal(audiopath)
+        signal = madmom.audio.Signal(audiopath, num_channels=1)
         duration = signal.num_samples / signal.sample_rate
+        framed_signal = self.frame_cutter(signal)
+        frame_spls = framed_signal.sound_pressure_level()
         chromagram = self.extractor(signal)
         chromagram = np.roll(chromagram, 3, axis=1)
-        return chromagram, self.get_frame_times(chromagram), duration
+        return chromagram, self.get_frame_times(chromagram), duration, frame_spls
 
 
 class ChordEstimator:
@@ -67,10 +70,10 @@ class ChordEstimator:
         self.hmm = HMMTemplateCosSim(chord_templates, trans_prob, np.full(num_chords, 1/num_chords))
     
     def __call__(self, audio_path):
-        chromagram, (start_times, end_times), duration = self.chroma_extractor(audio_path)
+        chromagram, (start_times, end_times), duration, frame_spls = self.chroma_extractor(audio_path)
         hmm_smoothed_state_indices, _, confidence = self.hmm.decode_with_PPD(chromagram.T)
         squashed_start_times, squashed_end_times, squashed_chord_labels = squash_timed_labels(start_times, end_times, self.chords[hmm_smoothed_state_indices])
-        return squashed_start_times, squashed_end_times, squashed_chord_labels, confidence, duration
+        return squashed_start_times, squashed_end_times, squashed_chord_labels, confidence, duration, frame_spls
  
 
 cp = MadMomDeepChromaExtractor(samplerate, block_size, step_size)
@@ -90,14 +93,15 @@ def handle(req):
             audio_file.write(requests.get(req).content)
     else:
         audio_path = req
-    start_times, end_times, chord_labels, confidence, duration = hmm(audio_path)
-    response = {'confidence': confidence, 'duration': duration, 'chordSequence': []}
+    start_times, end_times, chord_labels, confidence, duration, frame_spls = hmm(audio_path)
+    response = {'confidence': confidence, 'duration': duration, 'frameSpls': frame_spls.tolist(), 'chordSequence': []}
     for start, end, label in zip(start_times, end_times, chord_labels):
         response['chordSequence'].append({'start': start, 'end': end, 'label': label})
     if p.scheme.startswith('http'):
         os.remove(audio_path)
         sys.stderr.write('Deleted {}\n'.format(audio_path))
     return json.dumps(response)
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
