@@ -1,15 +1,18 @@
 FROM ubuntu:18.04
 
+# Install build dependencies
 RUN apt-get update -y \
 &&  apt-get install -y build-essential python3 python3-pip ffmpeg git \
 &&  apt-get clean \
 &&  rm -rf /var/lib/apt/lists/*
 
+# Copy function files
 RUN mkdir -p /home/app
 WORKDIR /home/app
 COPY index.py index.py
 COPY function /home/app/function/
 
+# Install Python dependencies
 RUN pip3 install --no-cache-dir -r function/requirements.txt
 # RUN pip3 install --no-cache-dir madmom # v0.15.1 in PyPI not working
 RUN apt-get update -y \
@@ -23,12 +26,17 @@ RUN apt-get update -y \
 &&  apt-get clean \
 &&  rm -rf /var/lib/apt/lists/*
 
-ADD https://github.com/openfaas/faas/releases/download/0.8.0/fwatchdog /usr/bin
-RUN chmod +x /usr/bin/fwatchdog
+# Add watchdog
+RUN apt-get update -y \
+&&  apt-get install -y curl \
+&& curl -sSL https://github.com/openfaas/faas/releases/download/0.9.6/fwatchdog > /usr/bin/fwatchdog \
+&& chmod +x /usr/bin/fwatchdog \
+&& apt-get autoremove --purge -y curl \
+&&  apt-get clean \
+&&  rm -rf /var/lib/apt/lists/*
 
 # Add non root user
 RUN addgroup --system app && adduser --system --ingroup app app
-RUN chown app /home/app
 RUN chown -R app:app ./
 USER app
 
