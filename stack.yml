@@ -6,7 +6,7 @@ functions:
   ac-analysis:
     lang: python3
     handler: ./ac-analysis
-    image: audiocommons/faas-ac-analysis
+    image: audiocommons/faas-ac-analysis:latest
     environment_file:
      - env.yml
     environment:
@@ -17,7 +17,7 @@ functions:
   sonic-annotator:
     lang: dockerfile
     handler: ./sonic-annotator
-    image: audiocommons/faas-sonic-annotator
+    image: audiocommons/faas-sonic-annotator:latest
     environment:
       read_timeout: 300s
       write_timeout: 300s
@@ -26,7 +26,7 @@ functions:
   confident-chord-estimator:
     lang: dockerfile
     handler: ./confident-chord-estimator
-    image: audiocommons/faas-confident-chord-estimator
+    image: audiocommons/faas-confident-chord-estimator:latest
     environment:
       read_timeout: 300s
       write_timeout: 300s
