@@ -48,7 +48,10 @@ def analysis(provider, file_id, descriptor, writer):
     result = db[provider].find_one({'_id': file_id, '{}.{}'.format(descriptor, writer): {'$exists': True}})
     if result is not None:
         sys.stderr.write('Result found in DB\n')
-        return result[descriptor][writer]
+        if writer == 'json':
+            return json.dumps(result[descriptor][writer])
+        else:
+            return result[descriptor][writer]
     else:
         uri = audio_uri(file_id, provider)
         if descriptor == 'chords':
@@ -73,9 +76,12 @@ def analysis(provider, file_id, descriptor, writer):
                 result_content = result.text
             r = db[provider].update_one({'_id': file_id}, {'$set': {'{}.{}'.format(descriptor, writer): result_content}}, upsert=True)
             sys.stderr.write('Result stored in DB: {}\n'.format(r.raw_result))
-            return result_content
+            if writer == 'json':
+                return json.dumps(result_content)
+            else:
+                return result_content
         else:
-            sys.stderr.write('Getting descriptor failed with status code "{}"\n'.format(result.status_code))
+            sys.stderr.write('Calculation of "{}" failed with status code "{}"\n'.format(descriptor, result.status_code))
             return json.dumps({'status_code': result.status_code})
 
 
