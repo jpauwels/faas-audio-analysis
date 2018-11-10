@@ -3,6 +3,7 @@ import sys
 import json
 import pymongo
 import requests
+import os.path
 from urllib.parse import parse_qs
 from .config import providers, audio_uri
 
@@ -16,31 +17,33 @@ def handle(_):
     """handle a request to the function
     """
     args = parse_qs(os.getenv('Http_Query'))
-    sys.stderr.write('{}\n'.format(args))
-    try:
-        provider = args['provider'][0]
-        if provider not in providers:
-            return 'Unknown audio provider "{}". Allowed providers are : {}'.format(provider, providers)
-    except KeyError:
-        return 'Specify a provider in the HTTP Query'
+    descriptor = os.path.relpath(os.getenv('Http_Path'), '/')
+    if descriptor == 'register':
+        pass
+    elif descriptor == 'providers':
+        pass
+    elif descriptor == 'descriptors':
+        pass
+    else:
+        content_type = os.getenv('Http_Content_Type')
+        if content_type not in content_types:
+            return 'Unknown content type "{}" requested. Allowed content types are: {}'.format(content_type, content_types)
 
-    try:
-        file_id = args['id'][0]
-    except KeyError:
-        return 'Specify an id in the HTTP Query'
-
-    try:
-        descriptor = args['descriptor'][0]
         if descriptor not in descriptors:
             return 'Unknown descriptor "{}". Allowed descriptors are : {}'.format(descriptor, descriptors)
-    except KeyError:
-        return 'Specify a descriptor in the HTTP Query'
-
-    content_type = os.getenv('Http_Content_Type')
-    if content_type not in content_types:
-        return 'Unknown content type "{}" requested. Allowed content types are: {}'.format(content_type, content_types)
-
-    return analysis(provider, file_id, descriptor, os.path.basename(content_type))
+        response = []
+        for ld_id in args['id']:
+            try:
+                provider, file_id = ld_id.split(':')
+            except ValueError:
+                return 'Malformed id. Needs to be of the form "content-provider:file_id"'
+            if provider not in providers:
+                return 'Unknown content provider "{}". Allowed providers are : {}'.format(provider, providers)
+            response.append(analysis(provider, file_id, descriptor, os.path.basename(content_type)))
+        if content_type == 'application/json':
+            return json.dumps(response)
+        else:
+            return response
 
 
 def analysis(provider, file_id, descriptor, writer):
@@ -48,10 +51,7 @@ def analysis(provider, file_id, descriptor, writer):
     result = db[provider].find_one({'_id': file_id, '{}.{}'.format(descriptor, writer): {'$exists': True}})
     if result is not None:
         sys.stderr.write('Result found in DB\n')
-        if writer == 'json':
-            return json.dumps(result[descriptor][writer])
-        else:
-            return result[descriptor][writer]
+        return result[descriptor][writer]
     else:
         uri = audio_uri(file_id, provider)
         if descriptor == 'chords':
@@ -76,10 +76,7 @@ def analysis(provider, file_id, descriptor, writer):
                 result_content = result.text
             r = db[provider].update_one({'_id': file_id}, {'$set': {'{}.{}'.format(descriptor, writer): result_content}}, upsert=True)
             sys.stderr.write('Result stored in DB: {}\n'.format(r.raw_result))
-            if writer == 'json':
-                return json.dumps(result_content)
-            else:
-                return result_content
+            return result_content
         else:
             sys.stderr.write('Calculation of "{}" failed with status code "{}"\n'.format(descriptor, result.status_code))
             return json.dumps({'status_code': result.status_code})
