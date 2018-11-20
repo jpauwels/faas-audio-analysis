@@ -8,7 +8,7 @@ from urllib.parse import parse_qs
 from .config import providers, audio_uri
 
 
-descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys']
+descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys', 'essentia-music']
 content_types = ['application/json', 'text/plain', 'text/rdf', 'text/csv'] #'audiodb', 'default', 'jams', 'lab', 'midi']
 _client = None
 
@@ -63,6 +63,10 @@ def analysis(provider, file_id, descriptor, writer):
                 return 'Only "rdf" and "csv" content types supported for "instruments" descriptor'
             sa_arg = '-t transforms/instrument-probabilities.n3 -w {writer} --{writer}-stdout {uri}'.format(writer=writer, uri=uri)
             result = requests.post('http://gateway:8080/function/instrument-identifier', data=sa_arg)
+        elif descriptor == 'essentia-music':
+            if writer != 'json':
+                return 'Only "json" content type supported for "essentia-music" descriptor'
+            result = requests.post('http://gateway:8080/function/essentia', data=uri)
         else:
             if writer not in ['csv', 'rdf']:
                 return 'Only "rdf" and "csv" content types supported for "{}" descriptor'.format(descriptor)

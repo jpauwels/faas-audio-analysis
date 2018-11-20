@@ -41,3 +41,12 @@ functions:
       write_timeout: 300s
       combine_output: false
       write_debug: false
+  essentia:
+    lang: dockerfile
+    handler: ./essentia
+    image: audiocommons/faas-essentia:latest
+    environment:
+      read_timeout: 300s
+      write_timeout: 300s
+      combine_output: false
+      write_debug: false
