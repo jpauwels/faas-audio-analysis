@@ -2,3 +2,6 @@ environment:
   MONGO_CONNECTION: mongodb://localhost:27017/test
   FREESOUND_API_KEY: secret-string
   EUROPEANA_API_KEY: another-secret-string
+  MINIO_HOSTNAME: minio:9000
+  MINIO_ACCESS_KEY: access-key
+  MINIO_SECRET_KEY: secret-key
