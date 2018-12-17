@@ -9,7 +9,12 @@ from .config import providers, audio_uri
 
 
 descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys', 'essentia-music']
-content_types = ['application/json', 'text/plain', 'text/rdf', 'text/csv'] #'audiodb', 'default', 'jams', 'lab', 'midi']
+# Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
+supported_output = {'chords': ['application/json'],
+                    'instruments': ['application/json', 'text/csv', 'text/turtle'],
+                    'beats-beatroot': ['application/json', 'text/csv', 'text/turtle'],
+                    'keys': ['application/json', 'text/csv', 'text/turtle'],
+                    'essentia-music': ['application/json']} # default output first
 _client = None
 
 
@@ -25,12 +30,17 @@ def handle(_):
     elif descriptor == 'descriptors':
         pass
     else:
-        content_type = os.getenv('Http_Content_Type')
-        if content_type not in content_types:
-            return 'Unknown content type "{}" requested. Allowed content types are: {}'.format(content_type, content_types)
-
         if descriptor not in descriptors:
             return 'Unknown descriptor "{}". Allowed descriptors are : {}'.format(descriptor, descriptors)
+        content_type = os.getenv('Http_Content_Type')
+        if content_type:
+            if content_type not in supported_output[descriptor]:
+                return 'Only {} content-type{} are supported for the "{}" descriptor'.format(
+                '"'+'", "'.join(supported_output[descriptor])+'"',
+                's' if len(supported_output[descriptor]) > 1 else '',
+                descriptor)
+        else:
+            content_type = supported_output[descriptor][0]
         response = []
         for ld_id in args['id']:
             try:
@@ -40,50 +50,53 @@ def handle(_):
             if provider not in providers:
                 return 'Unknown content provider "{}". Allowed providers are : {}'.format(provider, providers)
             response.append(analysis(provider, file_id, descriptor, os.path.basename(content_type)))
-        if content_type == 'application/json':
+        if content_type in ['application/json', 'application/ld+json']:
             return json.dumps(response)
         else:
             return response
 
 
-def analysis(provider, file_id, descriptor, writer):
+def analysis(provider, file_id, descriptor, output_format):
     db = _get_db()
-    result = db[provider].find_one({'_id': file_id, '{}.{}'.format(descriptor, writer): {'$exists': True}})
+    result = db[provider].find_one({'_id': file_id, '{}.{}'.format(descriptor, output_format): {'$exists': True}})
     if result is not None:
         sys.stderr.write('Result found in DB\n')
-        return result[descriptor][writer]
+        return result[descriptor][output_format]
     else:
         uri = audio_uri(file_id, provider)
         if descriptor == 'chords':
-            if writer != 'json':
-                return 'Only "json" content type supported for "chords" descriptor'
             result = requests.post('http://gateway:8080/function/confident-chord-estimator', data=uri)
         elif descriptor == 'instruments':
-            if writer not in ['csv', 'rdf']:
-                return 'Only "rdf" and "csv" content types supported for "instruments" descriptor'
-            sa_arg = '-t transforms/instrument-probabilities.n3 -w {writer} --{writer}-stdout {uri}'.format(writer=writer, uri=uri)
+            sa_arg = '-t transforms/instrument-probabilities.n3 -w {writer} --{writer}-stdout {uri}'.format(writer=_sa_writers[output_format], uri=uri)
             result = requests.post('http://gateway:8080/function/instrument-identifier', data=sa_arg)
         elif descriptor == 'essentia-music':
-            if writer != 'json':
-                return 'Only "json" content type supported for "essentia-music" descriptor'
             result = requests.post('http://gateway:8080/function/essentia', data=uri)
         else:
-            if writer not in ['csv', 'rdf']:
-                return 'Only "rdf" and "csv" content types supported for "{}" descriptor'.format(descriptor)
-            sa_arg = '-t transforms/{descriptor}.n3 -w {writer} --{writer}-stdout {uri}'.format(descriptor=descriptor, writer=writer, uri=uri)
+            sa_arg = '-t transforms/{descriptor}.n3 -w {writer} --{writer}-stdout {uri}'.format(descriptor=descriptor, writer=_sa_writers[output_format], uri=uri)
             sys.stderr.write('Calling sonic-annotator {}\n'.format(sa_arg))
             result = requests.get('http://gateway:8080/function/sonic-annotator', data=sa_arg)
         if result.status_code == requests.codes.ok:
-            if writer == 'json':
+            if output_format in ['json', 'json-ld']:
                 result_content = result.json()
             else:
                 result_content = result.text
-            r = db[provider].update_one({'_id': file_id}, {'$set': {'{}.{}'.format(descriptor, writer): result_content}}, upsert=True)
+            r = db[provider].update_one({'_id': file_id}, {'$set': {'{}.{}'.format(descriptor, output_format): result_content}}, upsert=True)
             sys.stderr.write('Result stored in DB: {}\n'.format(r.raw_result))
             return result_content
         else:
             sys.stderr.write('Calculation of "{}" failed with status code "{}"\n'.format(descriptor, result.status_code))
             return json.dumps({'status_code': result.status_code})
+
+
+_sa_writers = {
+    'octet-stream': 'audiodb',
+    'csv': 'csv',
+    'xml': 'default',
+    'json': 'jams',
+    'tab-separated-values': 'lab',
+    'midi': 'midi',
+    'turtle': 'rdf'
+}
 
 
 def _get_db():
