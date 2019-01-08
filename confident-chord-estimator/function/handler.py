@@ -9,6 +9,7 @@ import itertools
 import urllib.parse
 import os.path
 import requests
+from collections import defaultdict
 from hiddini import HMMTemplateCosSim
 
 
@@ -94,9 +95,12 @@ def handle(req):
     else:
         audio_path = req
     start_times, end_times, chord_labels, confidence, duration, frame_spls = hmm(audio_path)
-    response = {'confidence': confidence, 'duration': duration, 'frameSpls': frame_spls.tolist(), 'chordSequence': []}
+    response = {'confidence': confidence, 'duration': duration, 'chordSequence': [], 'chordRatio': defaultdict(int)}
     for start, end, label in zip(start_times, end_times, chord_labels):
         response['chordSequence'].append({'start': start, 'end': end, 'label': label})
+        response['chordRatio'][label] += end - start
+    response['chordRatio'].update({k: v/duration for k, v in response['chordRatio'].items()})
+    response['distinctChords'] = len(response['chordRatio'])
     if p.scheme.startswith('http'):
         os.remove(audio_path)
         sys.stderr.write('Deleted {}\n'.format(audio_path))

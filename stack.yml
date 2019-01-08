@@ -50,3 +50,14 @@ functions:
       write_timeout: 300s
       combine_output: false
       write_debug: false
+  ac-search:
+    lang: python3
+    handler: ./ac-search
+    image: audiocommons/faas-ac-search:latest
+    environment_file:
+     - env.yml
+    environment:
+      read_timeout: 30s
+      write_timeout: 30s
+      combine_output: false
+      write_debug: false
