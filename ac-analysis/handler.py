@@ -12,9 +12,9 @@ from . import ld_converter
 descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys', 'essentia-music']
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
 supported_output = {'chords': ['application/json', 'application/ld+json'],
-                    'instruments': ['application/json', 'text/csv', 'text/turtle'],
-                    'beats-beatroot': ['application/json', 'text/csv', 'text/turtle'],
-                    'keys': ['application/json', 'text/csv', 'text/turtle'],
+                    'instruments': ['application/json', 'application/ld+json', 'text/csv', 'text/turtle'],
+                    'beats-beatroot': ['application/json', 'application/ld+json', 'text/csv', 'text/turtle'],
+                    'keys': ['application/json', 'text/csv', 'application/ld+json', 'text/turtle'],
                     'essentia-music': ['application/json']} # default output first
 _client = None
 
@@ -50,11 +50,14 @@ def handle(_):
                 return 'Malformed id. Needs to be of the form "content-provider:file_id"'
             if provider not in providers:
                 return 'Unknown content provider "{}". Allowed providers are : {}'.format(provider, providers)
-            response.append(analysis(provider, file_id, descriptor, os.path.basename(content_type)))
+            output_format = os.path.basename(content_type) if content_type != 'application/ld+json' else 'json'
+            response.append(analysis(provider, file_id, descriptor, output_format))
         if len(response) == 1:
             response = response[0]
-        if content_type in ['application/json', 'application/ld+json']:
+        if content_type == 'application/json':
             return json.dumps(response)
+        elif content_type == 'application/ld+json':
+            return json.dumps(ld_converter.convert(descriptor, file_id, response, 'json-ld'))
         else:
             return response
 
@@ -79,10 +82,8 @@ def analysis(provider, file_id, descriptor, output_format):
             sys.stderr.write('Calling sonic-annotator {}\n'.format(sa_arg))
             result = requests.get('http://gateway:8080/function/sonic-annotator', data=sa_arg)
         if result.status_code == requests.codes.ok:
-            if output_format in ['json', 'ld+json']:
+            if output_format == 'json':
                 result_content = result.json()
-                if output_format == 'ld+json':
-                    result_content = json.loads(ld_converter.convert(descriptor, file_id, result_content, 'json-ld'))
             else:
                 result_content = result.text
             r = db[provider].update_one({'_id': file_id}, {'$set': {'{}.{}'.format(descriptor, output_format): result_content}}, upsert=True)
