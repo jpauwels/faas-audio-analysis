@@ -23,13 +23,11 @@ def handle(_):
     """handle a request to the function
     """
     args = parse_qs(os.getenv('Http_Query'))
-    descriptor = os.path.relpath(os.getenv('Http_Path'), '/')
-    if descriptor == 'register':
-        pass
-    elif descriptor == 'providers':
-        pass
+    descriptor = os.getenv('Http_Path')[1:]
+    if descriptor == 'providers':
+        return json.dumps(providers)
     elif descriptor == 'descriptors':
-        pass
+        return json.dumps(descriptors)
     else:
         if descriptor not in descriptors:
             return 'Unknown descriptor "{}". Allowed descriptors are : {}'.format(descriptor, descriptors)
