@@ -9,13 +9,17 @@ from .config import providers, audio_uri
 from . import ld_converter
 
 
-descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys', 'essentia-music']
+descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys', 'tempo', 'global-key', 'tuning', 'beats']
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
 supported_output = {'chords': ['application/json', 'application/ld+json'],
                     'instruments': ['application/json', 'application/ld+json', 'text/csv', 'text/turtle'],
                     'beats-beatroot': ['application/json', 'application/ld+json', 'text/csv', 'text/turtle'],
                     'keys': ['application/json', 'text/csv', 'application/ld+json', 'text/turtle'],
-                    'essentia-music': ['application/json']} # default output first
+                    'tempo': ['application/json'],
+                    'global-key': ['application/json'],
+                    'tuning': ['application/json'],
+                    'beats': ['application/json'],
+                    } # default output first
 _client = None
 
 
@@ -40,7 +44,7 @@ def handle(_):
                 descriptor)
         else:
             content_type = supported_output[descriptor][0]
-        response = []
+        responses = []
         for ld_id in args['id']:
             try:
                 provider, file_id = ld_id.split(':')
@@ -49,15 +53,28 @@ def handle(_):
             if provider not in providers:
                 return 'Unknown content provider "{}". Allowed providers are : {}'.format(provider, providers)
             output_format = os.path.basename(content_type) if content_type != 'application/ld+json' else 'json'
-            response.append(analysis(provider, file_id, descriptor, output_format))
-        if len(response) == 1:
-            response = response[0]
+            req_descriptor = 'essentia-music' if descriptor in ['tempo', 'global-key', 'tuning', 'beats'] else descriptor
+            response = analysis(provider, file_id, req_descriptor, output_format)
+            if descriptor == 'tempo': # response guaranteed to be a dict
+                response = {'tempo': response['rhythm']['bpm']}
+            elif descriptor == 'global-key':
+                most_likely_key = sorted([v for k, v in response['tonal'].items() if k.startswith('key_')], key=lambda v: v['strength'], reverse=True)[0]
+                response = {'key': most_likely_key['key']+' '+most_likely_key['scale'], 'confidence': most_likely_key['strength']}
+            elif descriptor == 'tuning':
+                response = {'tuning': response['tonal']['tuning_frequency']}
+            elif descriptor == 'beats':
+                response = {'beats': response['rhythm']['beats_position']}
+            if content_type == 'application/json':
+                response['id'] = ld_id
+            responses.append(response)
+        if len(responses) == 1:
+            responses = responses[0]
         if content_type == 'application/json':
-            return json.dumps(response)
+            return json.dumps(responses)
         elif content_type == 'application/ld+json':
-            return json.dumps(ld_converter.convert(descriptor, file_id, response, 'json-ld'))
+            return json.dumps(ld_converter.convert(descriptor, file_id, responses, 'json-ld'))
         else:
-            return response
+            return responses
 
 
 def analysis(provider, file_id, descriptor, output_format):
