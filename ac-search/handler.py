@@ -17,7 +17,7 @@ def handle(_):
         req (str): request body
     """
     args = parse_qs(os.getenv('Http_Query'))
-    conf = os.path.relpath(os.getenv('Http_Path'), '/').split('/')
+    conf = os.getenv('Http_Path')[1:].split('/')
     provider = conf[0]
     if provider not in providers:
         return 'Unknown content provider "{}". Allowed providers are : "{}"'.format(provider, ','.join(providers))
@@ -31,23 +31,37 @@ def search(provider, args, num_results, offset):
     agg_pipeline = []
     projection = {}
     if 'tempo' in args:
-        params = args['tempo'][0].split(',')
-        if len(params) == 2:
-            if params[1][-1] == '%':
-                # BPM tolerance
-                params[1] = params[1][:-1]
-                target_bpm, tolerance = map(float, params)
-                min_bpm = target_bpm * (100 - tolerance) / 100
-                max_bpm = target_bpm * (100 + tolerance) / 100
-            else:
-                # BPM range
-                min_bpm, max_bpm = map(float, params)
-                target_bpm = (min_bpm + max_bpm) / 2
-            agg_pipeline.extend([{'$match': {'essentia-music.json.rhythm.bpm': {'$gte': min_bpm, '$lt': max_bpm}}},
-                                    {'$addFields': {'bpmDistance': {'$abs': {'$subtract': [target_bpm, '$essentia-music.json.rhythm.bpm']}}}},
-                                    {'$sort': {'bpmDistance': pymongo.ASCENDING}}])
+        param = args['tempo'][0]
+        if param.startswith('<='):
+            agg_pipeline.extend([{'$match': {'essentia-music.json.rhythm.bpm': {'$lte': float(param[2:])}}},
+                                 {'$sort': {'essentia-music.json.rhythm.bpm': pymongo.DESCENDING}}])
+        elif param.startswith('>='):
+            agg_pipeline.extend([{'$match': {'essentia-music.json.rhythm.bpm': {'$gte': float(param[2:])}}},
+                                 {'$sort': {'essentia-music.json.rhythm.bpm': pymongo.ASCENDING}}])
+        elif param.startswith('<'):
+            agg_pipeline.extend([{'$match': {'essentia-music.json.rhythm.bpm': {'$lt': float(param[1:])}}},
+                                 {'$sort': {'essentia-music.json.rhythm.bpm': pymongo.DESCENDING}}])
+        elif param.startswith('>'):
+            agg_pipeline.extend([{'$match': {'essentia-music.json.rhythm.bpm': {'$gt': float(param[1:])}}},
+                                 {'$sort': {'essentia-music.json.rhythm.bpm': pymongo.ASCENDING}}])
         else:
-            return 'The tempo search parameters need to be of the form "<min BPM>,<max BPM>" or "<BPM>,<tolerance>%"'
+            params = param.split('-')
+            if len(params) == 2:
+                if params[1][-1] == '%':
+                    # BPM tolerance
+                    params[1] = params[1][:-1]
+                    target_bpm, tolerance = map(float, params)
+                    min_bpm = target_bpm * (100 - tolerance) / 100
+                    max_bpm = target_bpm * (100 + tolerance) / 100
+                else:
+                    # BPM range
+                    min_bpm, max_bpm = map(float, params)
+                    target_bpm = (min_bpm + max_bpm) / 2
+                agg_pipeline.extend([{'$match': {'essentia-music.json.rhythm.bpm': {'$gte': min_bpm, '$lt': max_bpm}}},
+                                     {'$addFields': {'bpmDistance': {'$abs': {'$subtract': [target_bpm, '$essentia-music.json.rhythm.bpm']}}}},
+                                     {'$sort': {'bpmDistance': pymongo.ASCENDING}}])
+            else:
+                return 'The tempo search parameters need to be of the form "<min BPM>-<max BPM>" or "<BPM>-<tolerance>%"'
         projection['tempo'] = '$essentia-music.json.rhythm.bpm'
     if 'chords' in args:
         params = args['chords'][0].split(',')
