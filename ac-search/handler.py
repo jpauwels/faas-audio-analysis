@@ -10,6 +10,7 @@ from .config import providers
 
 descriptors = ['chords', 'tempo', 'tuning', 'global-key']
 _key_regex = re.compile('^(A#|C#|D#|F#|G#|[A-G])?(major|minor)?$')
+_chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
 _client = None
 
 
@@ -95,26 +96,31 @@ def search(provider, args, num_results, offset):
                                     'confidence': '$essentia-music.json.tonal.key_best_matching.strength'}
     if 'chords' in args:
         params = args['chords'][0].split(',')
-        chords = params[0]
-        coverage = float(params[1]) if len(params) > 1 and params[1] else 1.
-        requested_chords = chords.split('-')
+        chords = params[0].split('-')
+        if not all([_chord_regex.match(c) for c in chords]):
+            return 'The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens'
+        if len(params) > 1 and params[1]:
+            coverage = float(params[1][:-1]) / 100
+            if not params[1].endswith('%') or coverage > 1 or coverage < 0:
+                return 'The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign'
+        else:
+            coverage = 1.
         agg_pipeline.extend([
             {
                 '$addFields':
                 {
-                    'coverage': {'$sum': ['$chords.json.chordRatio.{}'.format(c) for c in requested_chords]},
-                    'coveredChords': {'$sum': [{'$cond': [{'$gt': ['$chords.json.chordRatio.{}'.format(c), 0]}, 1, 0]} for c in requested_chords]}
+                    'coverage': {'$sum': ['$chords.json.chordRatio.{}'.format(c) for c in chords]},
+                    'coveredChords': {'$sum': [{'$cond': [{'$gt': ['$chords.json.chordRatio.{}'.format(c), 0]}, 1, 0]} for c in chords]}
                 }
             },
             {
                 '$match': {'coverage': {'$gte': coverage}}
             },
             {
-                '$sort': SON([('coveredChords', pymongo.DESCENDING),
-                            ('confidence', pymongo.DESCENDING)])
+                '$sort': SON([('coveredChords', pymongo.DESCENDING), ('chords.json.confidence', pymongo.DESCENDING)])
             },
             {
-                '$project': {'chords.json.distinctChords': False, 'chords.json.chordRatio': False, 'chords.json.frameSpls': False}
+                '$project': {'chords.json.distinctChords': False, 'chords.json.chordRatio': False}
             },
         ])
         projection['chords'] = '$chords.json'
