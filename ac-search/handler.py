@@ -1,13 +1,15 @@
 import os
 import sys
 import json
+import re
 import pymongo
 from bson.son import SON
 from urllib.parse import parse_qs
 from .config import providers
 
 
-descriptors = ['chords', 'tempo', 'tuning']
+descriptors = ['chords', 'tempo', 'tuning', 'global-key']
+_key_regex = re.compile('^(A#|C#|D#|F#|G#|[A-G])?(major|minor)?$')
 _client = None
 
 
@@ -71,6 +73,26 @@ def search(provider, args, num_results, offset):
     elif 'tuning' in args:
         agg_pipeline.extend(_parse_single_number_query('tuning', args, 'essentia-music.json.tonal.tuning_frequency'))
         projection['tuning'] = '$essentia-music.json.tonal.tuning_frequency'
+    if 'global-key' in args:
+        key = args['global-key'][0]
+        split_key = _key_regex.match(key)
+        try:
+            tonic = split_key.group(1)
+            scale = split_key.group(2)
+        except AttributeError:
+            return 'The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]'
+        key_variants = ['edma', 'krumhansl', 'temperley']
+        agg_pipeline.extend([
+            {'$match': {'$or': [{'essentia-music.json.tonal.key_{}.key'.format(k): tonic, 'essentia-music.json.tonal.key_{}.scale'.format(k): scale} for k in key_variants]}},
+            {'$addFields': {'essentia-music.json.tonal.key_best_matching': 
+                {'$let': {'vars': {'matchingKeys': {'$filter': {'input': ['$essentia-music.json.tonal.key_{}'.format(k) for k in key_variants], 
+                                                                'cond': {'$and': [{'$eq': ['$$this.key', tonic]}, {'$eq': ['$$this.scale', scale]}]}}}},
+                          'in': {'$arrayElemAt': ['$$matchingKeys', {'$indexOfArray': ['$$matchingKeys.strength', {'$max': ['$$matchingKeys.strength']}]}]}}}
+            }},
+            {'$sort': {'essentia-music.json.tonal.key_best_matching.strength': pymongo.DESCENDING}}
+        ])
+        projection['global-key'] = {'key': {'$concat': ['$essentia-music.json.tonal.key_best_matching.key', ' ', '$essentia-music.json.tonal.key_best_matching.scale']}, 
+                                    'confidence': '$essentia-music.json.tonal.key_best_matching.strength'}
     if 'chords' in args:
         params = args['chords'][0].split(',')
         chords = params[0]
