@@ -66,64 +66,68 @@ def search(provider, args, num_results, offset):
                         {'$addFields': {'distance': {'$abs': {'$subtract': [target_value, '${}'.format(mongo_field)]}}}},
                         {'$sort': {'distance': pymongo.ASCENDING}}]
         except (ValueError, IndexError):
-            return 'The {} search parameters need to be of the form "[<|>|<=|>=]<value>", "<min>-<max>" or "<value>+-<tolerance>%"'.format(descriptor)
+            raise SyntaxError('The {} search parameters need to be of the form "[<|>|<=|>=]<value>", "<min>-<max>" or "<value>+-<tolerance>%"'.format(descriptor))
 
-    if 'tempo' in args:
-        agg_pipeline.extend(_parse_single_number_query('tempo', args, 'essentia-music.json.rhythm.bpm'))
-        projection['tempo'] = '$essentia-music.json.rhythm.bpm'
-    elif 'tuning' in args:
-        agg_pipeline.extend(_parse_single_number_query('tuning', args, 'essentia-music.json.tonal.tuning_frequency'))
-        projection['tuning'] = '$essentia-music.json.tonal.tuning_frequency'
-    if 'global-key' in args:
-        key = args['global-key'][0]
-        split_key = _key_regex.match(key)
-        try:
-            tonic = split_key.group(1)
-            scale = split_key.group(2)
-        except AttributeError:
-            return 'The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]'
-        key_variants = ['edma', 'krumhansl', 'temperley']
-        agg_pipeline.extend([
-            {'$match': {'$or': [{'essentia-music.json.tonal.key_{}.key'.format(k): tonic, 'essentia-music.json.tonal.key_{}.scale'.format(k): scale} for k in key_variants]}},
-            {'$addFields': {'essentia-music.json.tonal.key_best_matching': 
-                {'$let': {'vars': {'matchingKeys': {'$filter': {'input': ['$essentia-music.json.tonal.key_{}'.format(k) for k in key_variants], 
-                                                                'cond': {'$and': [{'$eq': ['$$this.key', tonic]}, {'$eq': ['$$this.scale', scale]}]}}}},
-                          'in': {'$arrayElemAt': ['$$matchingKeys', {'$indexOfArray': ['$$matchingKeys.strength', {'$max': ['$$matchingKeys.strength']}]}]}}}
-            }},
-            {'$sort': {'essentia-music.json.tonal.key_best_matching.strength': pymongo.DESCENDING}}
-        ])
-        projection['global-key'] = {'key': {'$concat': ['$essentia-music.json.tonal.key_best_matching.key', ' ', '$essentia-music.json.tonal.key_best_matching.scale']}, 
-                                    'confidence': '$essentia-music.json.tonal.key_best_matching.strength'}
-    if 'chords' in args:
-        params = args['chords'][0].split(',')
-        chords = params[0].split('-')
-        if not all([_chord_regex.match(c) for c in chords]):
-            return 'The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens'
-        if len(params) > 1 and params[1]:
-            coverage = float(params[1][:-1]) / 100
-            if not params[1].endswith('%') or coverage > 1 or coverage < 0:
-                return 'The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign'
-        else:
-            coverage = 1.
-        agg_pipeline.extend([
-            {
-                '$addFields':
+    try:
+        if 'tempo' in args:
+            agg_pipeline.extend(_parse_single_number_query('tempo', args, 'essentia-music.json.rhythm.bpm'))
+            projection['tempo'] = '$essentia-music.json.rhythm.bpm'
+        elif 'tuning' in args:
+            agg_pipeline.extend(_parse_single_number_query('tuning', args, 'essentia-music.json.tonal.tuning_frequency'))
+            projection['tuning'] = '$essentia-music.json.tonal.tuning_frequency'
+        if 'global-key' in args:
+            key = args['global-key'][0]
+            split_key = _key_regex.match(key)
+            try:
+                tonic = split_key.group(1)
+                scale = split_key.group(2)
+            except AttributeError:
+                raise SyntaxError('The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]')
+            key_variants = ['edma', 'krumhansl', 'temperley']
+            agg_pipeline.extend([
+                {'$match': {'$or': [{'essentia-music.json.tonal.key_{}.key'.format(k): tonic, 'essentia-music.json.tonal.key_{}.scale'.format(k): scale} for k in key_variants]}},
+                {'$addFields': {'essentia-music.json.tonal.key_best_matching': 
+                    {'$let': {'vars': {'matchingKeys': {'$filter': {'input': ['$essentia-music.json.tonal.key_{}'.format(k) for k in key_variants], 
+                                                                    'cond': {'$and': [{'$eq': ['$$this.key', tonic]}, {'$eq': ['$$this.scale', scale]}]}}}},
+                            'in': {'$arrayElemAt': ['$$matchingKeys', {'$indexOfArray': ['$$matchingKeys.strength', {'$max': ['$$matchingKeys.strength']}]}]}}}
+                }},
+                {'$sort': {'essentia-music.json.tonal.key_best_matching.strength': pymongo.DESCENDING}}
+            ])
+            projection['global-key'] = {'key': {'$concat': ['$essentia-music.json.tonal.key_best_matching.key', ' ', '$essentia-music.json.tonal.key_best_matching.scale']}, 
+                                        'confidence': '$essentia-music.json.tonal.key_best_matching.strength'}
+        if 'chords' in args:
+            params = args['chords'][0].split(',')
+            chords = params[0].split('-')
+            if not all([_chord_regex.match(c) for c in chords]):
+                raise SyntaxError('The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens')
+            if len(params) > 1 and params[1]:
+                coverage = float(params[1][:-1]) / 100
+                if not params[1].endswith('%') or coverage > 1 or coverage < 0:
+                    raise SyntaxError('The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign')
+            else:
+                coverage = 1.
+            agg_pipeline.extend([
                 {
-                    'coverage': {'$sum': ['$chords.json.chordRatio.{}'.format(c) for c in chords]},
-                    'coveredChords': {'$sum': [{'$cond': [{'$gt': ['$chords.json.chordRatio.{}'.format(c), 0]}, 1, 0]} for c in chords]}
-                }
-            },
-            {
-                '$match': {'coverage': {'$gte': coverage}}
-            },
-            {
-                '$sort': SON([('coveredChords', pymongo.DESCENDING), ('chords.json.confidence', pymongo.DESCENDING)])
-            },
-            {
-                '$project': {'chords.json.distinctChords': False, 'chords.json.chordRatio': False}
-            },
-        ])
-        projection['chords'] = '$chords.json'
+                    '$addFields':
+                    {
+                        'coverage': {'$sum': ['$chords.json.chordRatio.{}'.format(c) for c in chords]},
+                        'coveredChords': {'$sum': [{'$cond': [{'$gt': ['$chords.json.chordRatio.{}'.format(c), 0]}, 1, 0]} for c in chords]}
+                    }
+                },
+                {
+                    '$match': {'coverage': {'$gte': coverage}}
+                },
+                {
+                    '$sort': SON([('coveredChords', pymongo.DESCENDING), ('chords.json.confidence', pymongo.DESCENDING)])
+                },
+                {
+                    '$project': {'chords.json.distinctChords': False, 'chords.json.chordRatio': False}
+                },
+            ])
+            projection['chords'] = '$chords.json'
+    except SyntaxError as e:
+        return str(e)
+    
     agg_pipeline.extend([{'$skip': offset}, {'$limit': num_results}])
     agg_pipeline.append({'$project': projection})
 
