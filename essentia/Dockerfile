@@ -20,8 +20,8 @@ RUN cd chromaprint && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Releas
 RUN git clone https://github.com/jpauwels/gaia.git
 RUN apk add --no-cache qt-dev #swig libtbb-dev
 RUN cd gaia && python3 waf configure && python3 waf && python3 waf install # --with-tbb --with-python-bindings
-RUN git clone https://github.com/MTG/essentia
-RUN cd essentia && python3 waf configure --build-static --with-examples --with-python  --with-gaia --with-vamp --with-cpptests \
+RUN git clone https://github.com/MTG/essentia.git
+RUN cd essentia && git checkout 133a0d3f9a14663fdd22c9dad24445998cbb8aae && python3 waf configure --build-static --with-examples --with-python  --with-gaia --with-vamp --with-cpptests \
 &&  python3 waf install
 
 
