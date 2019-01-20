@@ -99,7 +99,7 @@ def handle(req):
     for start, end, label in zip(start_times, end_times, chord_labels):
         response['chordSequence'].append({'start': start, 'end': end, 'label': label})
         response['chordRatio'][label] += end - start
-    response['chordRatio'].update({k: v/duration for k, v in response['chordRatio'].items()})
+    response['chordRatio'].update({k: v/end for k, v in response['chordRatio'].items()})
     response['distinctChords'] = len(response['chordRatio'])
     if p.scheme.startswith('http'):
         os.remove(audio_path)
