@@ -116,11 +116,21 @@ def _parse_key_query(param):
         scale = split_key.group(2)
     except AttributeError:
         raise SyntaxError('The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]')
+    match_list = [dict() for k in _key_variants]
+    filter_list = []
+    if tonic:
+        for m, k in zip(match_list, _key_variants):
+            m['essentia-music.json.tonal.key_{}.key'.format(k)] = tonic
+        filter_list.append({'$eq': ['$$this.key', tonic]})
+    if scale:
+        for m, k in zip(match_list, _key_variants):
+            m['essentia-music.json.tonal.key_{}.scale'.format(k)] = scale
+        filter_list.append({'$eq': ['$$this.scale', scale]})
     return [
-        {'$match': {'$or': [{'essentia-music.json.tonal.key_{}.key'.format(k): tonic, 'essentia-music.json.tonal.key_{}.scale'.format(k): scale} for k in _key_variants]}},
+        {'$match': {'$or': match_list}},
         {'$addFields': {'key_best_matching': 
             {'$let': {'vars': {'matchingKeys': {'$filter': {'input': ['$essentia-music.json.tonal.key_{}'.format(k) for k in _key_variants], 
-                                                            'cond': {'$and': [{'$eq': ['$$this.key', tonic]}, {'$eq': ['$$this.scale', scale]}]}}}},
+                                                            'cond': {'$and': filter_list}}}},
                     'in': {'$arrayElemAt': ['$$matchingKeys', {'$indexOfArray': ['$$matchingKeys.strength', {'$max': ['$$matchingKeys.strength']}]}]}}}
         }},
         {'$sort': {'key_best_matching.strength': pymongo.DESCENDING}}
