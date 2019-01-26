@@ -21,6 +21,11 @@ def handle(_):
         req (str): request body
     """
     args = parse_qs(os.getenv('Http_Query'), keep_blank_values=True)
+    unknown_descriptors = list(filter(lambda d: d not in descriptors, args.keys()))
+    if unknown_descriptors:
+        return json.dumps('Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
+        's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(descriptors)))
+
     conf = os.getenv('Http_Path')[1:].split('/')
     provider = conf[0]
     if provider not in providers:
