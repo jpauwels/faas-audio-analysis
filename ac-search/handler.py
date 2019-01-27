@@ -21,7 +21,7 @@ def handle(_):
         req (str): request body
     """
     args = parse_qs(os.getenv('Http_Query'), keep_blank_values=True)
-    unknown_descriptors = list(filter(lambda d: d not in descriptors, args.keys()))
+    unknown_descriptors = list(filter(lambda d: d not in descriptors+['providers'], args.keys()))
     if unknown_descriptors:
         return json.dumps('Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
         's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(descriptors)))
@@ -41,6 +41,13 @@ def search(args, num_results, offset):
     projection = {}
 
     try:
+        if 'providers' in args:
+            allowed_providers = args['providers'][0].split(',')
+            unknown_providers = list(filter(lambda p: p not in providers, allowed_providers))
+            if unknown_providers:
+                return json.dumps('Unknown content provider{} "{}". Allowed content providers are : "{}"'.format(
+                's' if len(unknown_providers) > 1 else '', '", "'.join(unknown_providers), '", "'.join(providers)))
+            agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_providers)}}})
         if 'tempo' in args:
             param = args['tempo'][0]
             if param:
@@ -67,7 +74,7 @@ def search(args, num_results, offset):
             if param:
                 agg_pipeline.extend(_parse_chord_query(param))
             agg_pipeline.append({'$project': {'chords.distinctChords': False, 'chords.chordRatio': False}})
-            projection['chords'] = '$chords'
+            projection['chords'] = True
     except SyntaxError as e:
         return str(e)
     
