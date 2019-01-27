@@ -12,9 +12,9 @@ from . import ld_converter
 descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys', 'tempo', 'global-key', 'tuning', 'beats']
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
 supported_output = {'chords': ['application/json', 'application/ld+json'],
-                    'instruments': ['application/json', 'application/ld+json', 'text/csv', 'text/turtle'],
-                    'beats-beatroot': ['application/json', 'application/ld+json', 'text/csv', 'text/turtle'],
-                    'keys': ['application/json', 'text/csv', 'application/ld+json', 'text/turtle'],
+                    'instruments': ['application/json', 'application/ld+json'],
+                    'beats-beatroot': ['application/json', 'application/ld+json'],
+                    'keys': ['application/json', 'application/ld+json'],
                     'tempo': ['application/json'],
                     'global-key': ['application/json'],
                     'tuning': ['application/json'],
@@ -45,16 +45,15 @@ def handle(_):
         else:
             content_type = supported_output[descriptor][0]
         responses = []
-        for ld_id in args['id']:
+        for ac_id in args['id']:
             try:
-                provider, file_id = ld_id.split(':')
+                provider, file_id = ac_id.split(':')
             except ValueError:
-                return 'Malformed id. Needs to be of the form "content-provider:file_id"'
+                return 'Malformed id "{}". Needs to be of the form "content-provider:provider-id"'.format(ac_id)
             if provider not in providers:
                 return 'Unknown content provider "{}". Allowed providers are : {}'.format(provider, providers)
-            output_format = os.path.basename(content_type) if content_type != 'application/ld+json' else 'json'
             req_descriptor = 'essentia-music' if descriptor in ['tempo', 'global-key', 'tuning', 'beats'] else descriptor
-            response = analysis(provider, file_id, req_descriptor, output_format)
+            response = analysis(provider, file_id, req_descriptor)
             if descriptor == 'tempo': # response guaranteed to be a dict
                 response = {'tempo': response['rhythm']['bpm']}
             elif descriptor == 'global-key':
@@ -64,8 +63,7 @@ def handle(_):
                 response = {'tuning': response['tonal']['tuning_frequency']}
             elif descriptor == 'beats':
                 response = {'beats': response['rhythm']['beats_position']}
-            if content_type == 'application/json':
-                response['id'] = ld_id
+            response['_id'] = ac_id
             responses.append(response)
         if len(responses) == 1:
             responses = responses[0]
@@ -77,47 +75,34 @@ def handle(_):
             return responses
 
 
-def analysis(provider, file_id, descriptor, output_format):
+def analysis(provider, file_id, descriptor):
     db = _get_db()
-    result = db[provider].find_one({'_id': file_id, '{}.{}'.format(descriptor, output_format): {'$exists': True}})
+    result = db.descriptors.find_one({'_id': '{}:{}'.format(provider, file_id), descriptor: {'$exists': True}})
     if result is not None:
         sys.stderr.write('Result found in DB\n')
-        return result[descriptor][output_format]
+        return result[descriptor]
+
+    uri = audio_uri(file_id, provider)
+    if descriptor == 'chords':
+        result = requests.post('http://gateway:8080/function/confident-chord-estimator', data=uri)
+    elif descriptor == 'instruments':
+        sa_arg = '-t transforms/instrument-probabilities.n3 -w jams --jams-stdout {}'.format(uri)
+        result = requests.post('http://gateway:8080/function/instrument-identifier', data=sa_arg)
+    elif descriptor == 'essentia-music':
+        result = requests.post('http://gateway:8080/function/essentia', data=uri)
     else:
-        uri = audio_uri(file_id, provider)
-        if descriptor == 'chords':
-            result = requests.post('http://gateway:8080/function/confident-chord-estimator', data=uri)
-        elif descriptor == 'instruments':
-            sa_arg = '-t transforms/instrument-probabilities.n3 -w {writer} --{writer}-stdout {uri}'.format(writer=_sa_writers[output_format], uri=uri)
-            result = requests.post('http://gateway:8080/function/instrument-identifier', data=sa_arg)
-        elif descriptor == 'essentia-music':
-            result = requests.post('http://gateway:8080/function/essentia', data=uri)
-        else:
-            sa_arg = '-t transforms/{descriptor}.n3 -w {writer} --{writer}-stdout {uri}'.format(descriptor=descriptor, writer=_sa_writers[output_format], uri=uri)
-            sys.stderr.write('Calling sonic-annotator {}\n'.format(sa_arg))
-            result = requests.get('http://gateway:8080/function/sonic-annotator', data=sa_arg)
-        if result.status_code == requests.codes.ok:
-            if output_format == 'json':
-                result_content = result.json()
-            else:
-                result_content = result.text
-            r = db[provider].update_one({'_id': file_id}, {'$set': {'{}.{}'.format(descriptor, output_format): result_content}}, upsert=True)
-            sys.stderr.write('Result stored in DB: {}\n'.format(r.raw_result))
-            return result_content
-        else:
-            sys.stderr.write('Calculation of "{}" failed with status code "{}"\n'.format(descriptor, result.status_code))
-            return json.dumps({'status_code': result.status_code})
+        sa_arg = '-t transforms/{}.n3 -w jams --jams-stdout {}'.format(descriptor, uri)
+        sys.stderr.write('Calling sonic-annotator {}\n'.format(sa_arg))
+        result = requests.get('http://gateway:8080/function/sonic-annotator', data=sa_arg)
+    if result.status_code != requests.codes.ok:
+        sys.stderr.write('Calculation of "{}" failed with status code "{}"\n'.format(descriptor, result.status_code))
+        return json.dumps({'status_code': result.status_code})
 
+    result_content = result.json()
 
-_sa_writers = {
-    'octet-stream': 'audiodb',
-    'csv': 'csv',
-    'xml': 'default',
-    'json': 'jams',
-    'tab-separated-values': 'lab',
-    'midi': 'midi',
-    'turtle': 'rdf'
-}
+    r = db.descriptors.update_one({'_id': '{}:{}'.format(provider, file_id)}, {'$set': {descriptor: result_content}}, upsert=True)
+    sys.stderr.write('Result stored in DB: {}\n'.format(r.raw_result))
+    return result_content
 
 
 def _get_db():

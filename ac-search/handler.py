@@ -26,17 +26,17 @@ def handle(_):
         return json.dumps('Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
         's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(descriptors)))
 
-    conf = os.getenv('Http_Path')[1:].split('/')
-    provider = conf[0]
-    if provider not in providers:
-        return 'Unknown content provider "{}". Allowed providers are : "{}"'.format(provider, ','.join(providers))
-    num_results = int(conf[1]) if len(conf) > 1 and conf[1] else 1
-    offset = int(conf[2]) if len(conf) > 2 and conf[2] else 0
+    paging = os.getenv('Http_Path')[1:].split('/')
+    try:
+        num_results = int(paging[0]) if len(paging) > 0 and paging[0] else 1
+        offset = int(paging[1]) if len(paging) > 1 and paging[1] else 0
+    except ValueError:
+        return json.dumps('Invalid paging controls "{}". The correct syntax is "ac-search[/<num-results>[/<offset>]]"'.format(paging))
 
-    return json.dumps(search(provider, args, num_results, offset))
+    return json.dumps(search(args, num_results, offset))
 
 
-def search(provider, args, num_results, offset):
+def search(args, num_results, offset):
     agg_pipeline = []
     projection = {}
 
@@ -44,20 +44,20 @@ def search(provider, args, num_results, offset):
         if 'tempo' in args:
             param = args['tempo'][0]
             if param:
-                agg_pipeline.extend(_parse_single_number_query('tempo', param, 'essentia-music.json.rhythm.bpm'))
-            projection['tempo'] = '$essentia-music.json.rhythm.bpm'
+                agg_pipeline.extend(_parse_single_number_query('tempo', param, 'essentia-music.rhythm.bpm'))
+            projection['tempo'] = '$essentia-music.rhythm.bpm'
         if 'tuning' in args:
             param = args['tuning'][0]
             if param:
-                agg_pipeline.extend(_parse_single_number_query('tuning', param, 'essentia-music.json.tonal.tuning_frequency'))
-            projection['tuning'] = '$essentia-music.json.tonal.tuning_frequency'
+                agg_pipeline.extend(_parse_single_number_query('tuning', param, 'essentia-music.tonal.tuning_frequency'))
+            projection['tuning'] = '$essentia-music.tonal.tuning_frequency'
         if 'global-key' in args:
             param = args['global-key'][0]
             if param:
                 agg_pipeline.extend(_parse_key_query(param))
             else:
-                agg_pipeline.append({'$addFields': {'key_best_matching': 
-                    {'$let': {'vars': {'allKeys': ['$essentia-music.json.tonal.key_{}'.format(k) for k in _key_variants]},
+                agg_pipeline.append({'$addFields': {'key_best_matching':
+                    {'$let': {'vars': {'allKeys': ['$essentia-music.tonal.key_{}'.format(k) for k in _key_variants]},
                               'in': {'$arrayElemAt': ['$$allKeys', {'$indexOfArray': ['$$allKeys.strength', {'$max': ['$$allKeys.strength']}]}]}}}
                 }})
             projection['global-key'] = {'key': {'$concat': ['$key_best_matching.key', ' ', '$key_best_matching.scale']}, 
@@ -66,8 +66,8 @@ def search(provider, args, num_results, offset):
             param = args['chords'][0]
             if param:
                 agg_pipeline.extend(_parse_chord_query(param))
-            agg_pipeline.append({'$project': {'chords.json.distinctChords': False, 'chords.json.chordRatio': False}})
-            projection['chords'] = '$chords.json'
+            agg_pipeline.append({'$project': {'chords.distinctChords': False, 'chords.chordRatio': False}})
+            projection['chords'] = '$chords'
     except SyntaxError as e:
         return str(e)
     
@@ -76,7 +76,7 @@ def search(provider, args, num_results, offset):
         projection['_id'] = True
     agg_pipeline.append({'$project': projection})
 
-    cursor = _get_db()[provider].aggregate(agg_pipeline, allowDiskUse=True)
+    cursor = _get_db().descriptors.aggregate(agg_pipeline, allowDiskUse=True)
     return list(cursor)
 
 
@@ -125,16 +125,16 @@ def _parse_key_query(param):
     filter_list = []
     if tonic:
         for m, k in zip(match_list, _key_variants):
-            m['essentia-music.json.tonal.key_{}.key'.format(k)] = tonic
+            m['essentia-music.tonal.key_{}.key'.format(k)] = tonic
         filter_list.append({'$eq': ['$$this.key', tonic]})
     if scale:
         for m, k in zip(match_list, _key_variants):
-            m['essentia-music.json.tonal.key_{}.scale'.format(k)] = scale
+            m['essentia-music.tonal.key_{}.scale'.format(k)] = scale
         filter_list.append({'$eq': ['$$this.scale', scale]})
     return [
         {'$match': {'$or': match_list}},
         {'$addFields': {'key_best_matching': 
-            {'$let': {'vars': {'matchingKeys': {'$filter': {'input': ['$essentia-music.json.tonal.key_{}'.format(k) for k in _key_variants], 
+            {'$let': {'vars': {'matchingKeys': {'$filter': {'input': ['$essentia-music.tonal.key_{}'.format(k) for k in _key_variants], 
                                                             'cond': {'$and': filter_list}}}},
                     'in': {'$arrayElemAt': ['$$matchingKeys', {'$indexOfArray': ['$$matchingKeys.strength', {'$max': ['$$matchingKeys.strength']}]}]}}}
         }},
@@ -157,15 +157,15 @@ def _parse_chord_query(param):
         {
             '$addFields':
             {
-                'coverage': {'$sum': ['$chords.json.chordRatio.{}'.format(c) for c in chords]},
-                'coveredChords': {'$sum': [{'$cond': [{'$gt': ['$chords.json.chordRatio.{}'.format(c), 0]}, 1, 0]} for c in chords]}
+                'coverage': {'$sum': ['$chords.chordRatio.{}'.format(c) for c in chords]},
+                'coveredChords': {'$sum': [{'$cond': [{'$gt': ['$chords.chordRatio.{}'.format(c), 0]}, 1, 0]} for c in chords]}
             }
         },
         {
             '$match': {'coverage': {'$gte': coverage}}
         },
         {
-            '$sort': SON([('coveredChords', pymongo.DESCENDING), ('chords.json.confidence', pymongo.DESCENDING)])
+            '$sort': SON([('coveredChords', pymongo.DESCENDING), ('chords.confidence', pymongo.DESCENDING)])
         },
     ]
 
