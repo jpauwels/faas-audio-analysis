@@ -12,7 +12,7 @@ from . import ld_converter
 descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys', 'tempo', 'global-key', 'tuning', 'beats']
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
 supported_output = {'chords': ['application/json', 'application/ld+json'],
-                    'instruments': ['application/json', 'application/ld+json'],
+                    'instruments': ['application/json'],
                     'beats-beatroot': ['application/json', 'application/ld+json'],
                     'keys': ['application/json', 'application/ld+json'],
                     'tempo': ['application/json'],
@@ -21,6 +21,7 @@ supported_output = {'chords': ['application/json', 'application/ld+json'],
                     'beats': ['application/json'],
                     } # default output first
 _client = None
+_instrument_names = ['Shaker', 'Electronic Beats', 'Drum Kit', 'Synthesizer', 'Female Voice', 'Male Voice', 'Violin', 'Flute', 'Harpsichord', 'Electric Guitar', 'Clarinet', 'Choir', 'Organ', 'Acoustic Guitar', 'Viola', 'French Horn', 'Piano', 'Cello', 'Harp', 'Conga', 'Synthetic Bass', 'Electric Piano', 'Acoustic Bass', 'Electric Bass']
 
 
 def handle(_):
@@ -54,7 +55,7 @@ def handle(_):
                 return 'Unknown content provider "{}". Allowed providers are : {}'.format(provider, providers)
             req_descriptor = 'essentia-music' if descriptor in ['tempo', 'global-key', 'tuning', 'beats'] else descriptor
             response = analysis(provider, file_id, req_descriptor)
-            if descriptor == 'tempo': # response guaranteed to be a dict
+            if descriptor == 'tempo':
                 response = {'tempo': response['rhythm']['bpm']}
             elif descriptor == 'global-key':
                 most_likely_key = sorted([v for k, v in response['tonal'].items() if k.startswith('key_')], key=lambda v: v['strength'], reverse=True)[0]
@@ -63,6 +64,8 @@ def handle(_):
                 response = {'tuning': response['tonal']['tuning_frequency']}
             elif descriptor == 'beats':
                 response = {'beats': response['rhythm']['beats_position']}
+            elif descriptor == 'instruments':
+                response = {'instruments': {k:v for k,v in zip(_instrument_names, response['annotations'][0]['data'][0]['value'])}}
             response['_id'] = ac_id
             responses.append(response)
         if len(responses) == 1:
