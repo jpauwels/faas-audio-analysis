@@ -14,7 +14,7 @@ descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys', 'tempo', 'glob
 supported_output = {'chords': ['application/json', 'application/ld+json'],
                     'instruments': ['application/json'],
                     'beats-beatroot': ['application/json', 'application/ld+json'],
-                    'keys': ['application/json', 'application/ld+json'],
+                    'keys': ['application/json'],
                     'tempo': ['application/json'],
                     'global-key': ['application/json'],
                     'tuning': ['application/json'],
@@ -69,6 +69,8 @@ def handle(_):
             elif descriptor == 'chords':
                 response.pop('chordRatio')
                 response.pop('distinctChords')
+            elif descriptor == 'keys':
+                response = {'keys': [{'time': k['time'], 'label': k['label']} for k in response['annotations'][0]['data']]}
             response['_id'] = ac_id
             responses.append(response)
         if len(responses) == 1:
