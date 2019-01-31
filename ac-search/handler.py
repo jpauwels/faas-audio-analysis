@@ -5,10 +5,10 @@ import re
 import pymongo
 from bson.son import SON
 from urllib.parse import parse_qs
-from .config import providers
 
 
 descriptors = ['chords', 'tempo', 'tuning', 'global-key']
+all_providers = ['jamendo-tracks', 'freesound-sounds', 'europeana-res']
 _key_regex = re.compile('^(A#|C#|D#|F#|G#|[A-G])?(major|minor)?$')
 _key_variants = ['edma', 'krumhansl', 'temperley']
 _chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
@@ -43,10 +43,10 @@ def search(args, num_results, offset):
     try:
         if 'providers' in args:
             allowed_providers = args['providers'][0].split(',')
-            unknown_providers = list(filter(lambda p: p not in providers, allowed_providers))
+            unknown_providers = list(filter(lambda p: p not in all_providers, allowed_providers))
             if unknown_providers:
                 return json.dumps('Unknown content provider{} "{}". Allowed content providers are : "{}"'.format(
-                's' if len(unknown_providers) > 1 else '', '", "'.join(unknown_providers), '", "'.join(providers)))
+                's' if len(unknown_providers) > 1 else '', '", "'.join(unknown_providers), '", "'.join(all_providers)))
             agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_providers)}}})
         if 'tempo' in args:
             param = args['tempo'][0]
