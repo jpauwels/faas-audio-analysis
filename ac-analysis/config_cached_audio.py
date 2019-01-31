@@ -7,9 +7,9 @@ import urllib.parse
 import cgi
 import mimetypes
 from datetime import timedelta
+from .config_direct_audio import providers, audio_uri as provider_uri
 
 
-providers = ['jamendo-tracks', 'freesound-sounds', 'europeana-res']
 _client = minio.Minio(os.getenv('MINIO_HOSTNAME'), access_key=os.getenv('MINIO_ACCESS_KEY'), secret_key=os.getenv('MINIO_SECRET_KEY'), secure=False)
 
 
@@ -38,19 +38,3 @@ def audio_uri(provider_id, provider):
         object_name = object_prefix+file_ext
         _client.put_object(provider, object_name, io.BytesIO(r.content), int(r.headers['Content-Length']), r.headers['Content-Type'])
     return _client.presigned_get_object(provider, object_name, expires=timedelta(minutes=3))
-
-
-def provider_uri(provider_id, provider):
-    if provider == 'jamendo-tracks':
-        return 'https://flac.jamendo.com/download/track/{}/flac'.format(provider_id)
-    elif provider == 'freesound-sounds':
-        r = requests.get('https://freesound.org/apiv2/sounds/{id}/'.format(id=provider_id), params={'token': os.getenv('FREESOUND_API_KEY'), 'fields': 'previews'})
-        return r.json()['previews']['preview-hq-ogg']
-    elif provider == 'europeana-res':
-        r = requests.get('http://www.europeana.eu/api/v2/record/{id}.json'.format(id=provider_id), params={'wskey': os.getenv('EUROPEANA_API_KEY')})
-        if r.status_code == requests.codes['ok'] and r.json()['success']:
-            return r.json()['object']['aggregations'][0]['edmIsShownBy']
-        else:
-            raise  ValueError('The audio file for id "{}" could not be retrieved from Europeana'.format(provider_id))
-    else:
-        raise ValueError('Unknown audio provider "{}"'.format(provider))
