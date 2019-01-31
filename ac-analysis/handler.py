@@ -66,6 +66,9 @@ def handle(_):
                 response = {'beats': response['rhythm']['beats_position']}
             elif descriptor == 'instruments':
                 response = {'instruments': {k:v for k,v in zip(_instrument_names, response['annotations'][0]['data'][0]['value'])}}
+            elif descriptor == 'chords':
+                response.pop('chordRatio')
+                response.pop('distinctChords')
             response['_id'] = ac_id
             responses.append(response)
         if len(responses) == 1:
