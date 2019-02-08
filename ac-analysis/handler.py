@@ -6,11 +6,12 @@ import requests
 from requests.exceptions import HTTPError
 import os.path
 from urllib.parse import parse_qsl, urlsplit, unquote
-from .config import providers, audio_uri
 from . import ld_converter
+from bson.objectid import ObjectId
 
 
 all_descriptors = ['chords', 'instruments', 'keys', 'tempo', 'global-key', 'tuning', 'beats']
+providers = ['deezer', 'wasabi']
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
 supported_output = {'chords': ['application/json', 'application/ld+json'],
                     'instruments': ['application/json'],
@@ -117,26 +118,15 @@ def rewrite_descriptor_output(descriptor, result):
 
 def get_descriptor(linked_id, descriptor):
     db = _get_db()
-    result = db.descriptors.find_one({'_id': linked_id, descriptor: {'$exists': True}})
-    if result is not None:
-        sys.stderr.write('Result found in DB\n')
-        return result[descriptor]
-
     try:
-        provider, provider_id = linked_id.split(':')
-    except ValueError:
-        raise HTTPError('Malformed id "{}". Needs to be of the form "content-provider:provider-id"'.format(linked_id))
-    if provider not in providers:
-        raise HTTPError('Unknown content provider "{}". Allowed providers are : {}'.format(provider, providers))
-    uri = audio_uri(provider_id, provider)
-    file_name = os.path.basename(urlsplit(uri).path)
-    audio_content = requests.get(uri).content
-
-    result_content = calculate_descriptor(file_name, audio_content, descriptor)
-
-    r = db.descriptors.update_one({'_id': linked_id}, {'$set': {descriptor: result_content}}, upsert=True)
-    sys.stderr.write('Result stored in DB: {}\n'.format(r.raw_result))
-    return result_content
+        if provider == 'wasabi':
+            deezer_id = db.wasabi_song.find_one({'_id': ObjectId(file_id)}, {'_id': False, 'id_song_deezer': True})['id_song_deezer']
+        else:
+            deezer_id = file_id
+        result = db.descriptors.find_one({'_id': int(deezer_id), descriptor: {'$exists': True}})
+        return result[descriptor]
+    except:
+        raise FileNotFoundError('No "{}" found for id "{}"'.format(descriptor, provider+':'+file_id))
 
 
 def calculate_descriptor(file_name, audio_content, descriptor):
@@ -163,4 +153,4 @@ def _get_db():
         sys.stderr.write('Connecting to DB\n')
         _client = pymongo.MongoClient(os.getenv('MONGO_CONNECTION'))
     sys.stderr.write('Connected to DB: {}\n'.format(_client))
-    return _client.audiocommons
+    return _client.deezer

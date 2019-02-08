@@ -10,7 +10,7 @@ from urllib.parse import parse_qsl, unquote
 
 
 descriptors = ['chords', 'tempo', 'tuning', 'global-key']
-all_providers = ['jamendo-tracks', 'freesound-sounds', 'europeana-res']
+all_providers = ['deezer']
 _key_regex = re.compile('^(A#|C#|D#|F#|G#|[A-G])?(major|minor)?$')
 _key_variants = ['edma', 'krumhansl', 'temperley']
 _chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
@@ -34,7 +34,7 @@ def handle(audio_content):
             num_results = int(paging[0]) if len(paging) > 0 and paging[0] else 1
             offset = int(paging[1]) if len(paging) > 1 and paging[1] else 0
         except ValueError:
-            raise HTTPError('Invalid paging controls "{}". The correct syntax is "ac-search[/<num-results>[/<offset>]]"'.format(paging))
+            raise HTTPError('Invalid paging controls "{}". The correct syntax is "deezer-search[/<num-results>[/<offset>]]"'.format(paging))
 
         if audio_content:
             query = text_search_params(audio_content, query)
@@ -217,4 +217,4 @@ def _get_db():
         sys.stderr.write('Connecting to DB\n')
         _client = pymongo.MongoClient(os.getenv('MONGO_CONNECTION'))
     sys.stderr.write('Connected to DB: {}\n'.format(_client))
-    return _client.audiocommons
+    return _client.deezer
