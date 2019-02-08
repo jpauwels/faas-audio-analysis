@@ -54,7 +54,10 @@ def handle(_):
             if provider not in providers:
                 return 'Unknown content provider "{}". Allowed providers are : {}'.format(provider, providers)
             req_descriptor = 'essentia-music' if descriptor in ['tempo', 'global-key', 'tuning', 'beats'] else descriptor
-            response = analysis(provider, file_id, req_descriptor)
+            try:
+                response = analysis(provider, file_id, req_descriptor)
+            except Exception as e:
+                return json.dumps(str(e))
             if descriptor == 'tempo':
                 response = {'tempo': response['rhythm']['bpm']}
             elif descriptor == 'global-key':
@@ -103,8 +106,7 @@ def analysis(provider, file_id, descriptor):
         sys.stderr.write('Calling sonic-annotator {}\n'.format(sa_arg))
         result = requests.get('http://gateway:8080/function/sonic-annotator', data=sa_arg)
     if result.status_code != requests.codes.ok:
-        sys.stderr.write('Calculation of "{}" failed with status code "{}"\n'.format(descriptor, result.status_code))
-        return json.dumps({'status_code': result.status_code})
+        raise RuntimeError('Calculation of "{}" failed'.format(descriptor))
 
     result_content = result.json()
 
