@@ -6,7 +6,7 @@ functions:
   ac-analysis:
     lang: python3
     handler: ./ac-analysis
-    image: audiocommons/faas-ac-analysis:latest
+    image: jpauwels/faas-ac-analysis:latest
     environment_file:
      - env.yml
     environment:
@@ -17,7 +17,7 @@ functions:
   sonic-annotator:
     lang: dockerfile
     handler: ./sonic-annotator
-    image: audiocommons/faas-sonic-annotator:latest
+    image: jpauwels/faas-sonic-annotator:latest
     environment:
       read_timeout: 300s
       write_timeout: 300s
@@ -26,7 +26,7 @@ functions:
   confident-chord-estimator:
     lang: dockerfile
     handler: ./confident-chord-estimator
-    image: audiocommons/faas-confident-chord-estimator:latest
+    image: jpauwels/faas-confident-chord-estimator:latest
     environment:
       read_timeout: 300s
       write_timeout: 300s
@@ -35,7 +35,7 @@ functions:
   instrument-identifier:
     lang: dockerfile
     handler: ./instrument-identifier
-    image: audiocommons/faas-instrument-identifier
+    image: jpauwels/faas-instrument-identifier
     environment:
       read_timeout: 300s
       write_timeout: 300s
@@ -44,7 +44,7 @@ functions:
   essentia:
     lang: dockerfile
     handler: ./essentia
-    image: audiocommons/faas-essentia:latest
+    image: jpauwels/faas-essentia:latest
     environment:
       read_timeout: 300s
       write_timeout: 300s
@@ -53,7 +53,7 @@ functions:
   ac-search:
     lang: python3
     handler: ./ac-search
-    image: audiocommons/faas-ac-search:latest
+    image: jpauwels/faas-ac-search:latest
     environment_file:
      - env.yml
     environment:
