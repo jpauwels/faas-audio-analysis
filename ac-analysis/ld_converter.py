@@ -162,13 +162,13 @@ def json_sort(json_object, key_listing):
         raise ValueError("Invalid params")
 
 
-def convert(descriptor, file_id, result_dict, output_format):
+def convert(descriptor, result_dict, output_format):
     if descriptor == "chords":
-        serialised = convert_chords(file_id, result_dict, output_format)
+        serialised = convert_chords(result_dict, output_format)
     elif descriptor in ["instruments", "beats-beatroot", "keys"]:
-        serialised = convert_jams(file_id, result_dict, output_format, descriptor)
+        serialised = convert_jams(result_dict, output_format, descriptor)
     elif descriptor == "essentia-music":
-        serialised = convert_essentia(file_id, result_dict, output_format)
+        serialised = convert_essentia(result_dict, output_format)
     else:
         raise ValueError
     if output_format == 'json-ld':
@@ -181,12 +181,12 @@ def convert(descriptor, file_id, result_dict, output_format):
         return serialised
 
 
-def convert_chords(file_id, result_dict, output_format):
+def convert_chords(result_dict, output_format):
     # setting up namespaces
     g = Graph()
 
     # building up the graph as suggested in
-    result = URIRef("{}chords{}".format(str(ns), file_id))
+    result = URIRef("{}chords{}".format(str(ns), result_dict["id"]))
     g.add((result, RDF.type, afo.AudioFeature))
     g.add((result, afo.confidence, Literal(result_dict["confidence"])))
 
@@ -209,10 +209,10 @@ def convert_chords(file_id, result_dict, output_format):
     return g.serialize(format=output_format, context=context).decode("utf-8")
 
 
-def convert_jams(file_id, result_dict, output_format, descriptor):
+def convert_jams(result_dict, output_format, descriptor):
     g = Graph()
 
-    result = URIRef("{}_{}_{}".format(str(ns), descriptor, file_id)) # output root
+    result = URIRef("{}_{}_{}".format(str(ns), descriptor, result_dict["id"])) # output root
     g.add((result, RDF.type, afo.AudioFeature))
     # did not consider the "file_metadata"
 
@@ -254,5 +254,5 @@ def convert_jams(file_id, result_dict, output_format, descriptor):
                     g.add((entryURI, afo.value, Literal(entry["value"])))
     return g.serialize(format=output_format, context=context).decode("utf-8")
 
-def convert_essentia(file_id, result_dict, output_format):
+def convert_essentia(result_dict, output_format):
     raise NotImplementedError

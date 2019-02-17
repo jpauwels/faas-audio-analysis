@@ -61,18 +61,12 @@ RUN apk add --no-cache curl \
 
 # Add non root user
 RUN addgroup -S app && adduser app -S -G app
-RUN chown app /home/app
 WORKDIR /home/app
+COPY entrypoint.sh .
+RUN chown -R app:app .
 USER app
 
-COPY entrypoint.sh .
-
 # Populate example here - i.e. "cat", "sha512sum" or "node index.js"
-ENV fprocess="xargs ./entrypoint.sh"
-# Set to true to see request in function logs
-ENV write_debug="false"
-
-EXPOSE 8080
-
+ENV fprocess="./entrypoint.sh"
 HEALTHCHECK --interval=3s CMD [ -e /tmp/.lock ] || exit 1
 CMD [ "fwatchdog" ]

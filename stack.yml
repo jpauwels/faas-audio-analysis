@@ -4,9 +4,10 @@ provider:
 
 functions:
   ac-analysis:
-    lang: python3
+    lang: python3-binary
     handler: ./ac-analysis
     image: jpauwels/faas-ac-analysis:latest
+    readonly_root_filesystem: true
     environment_file:
      - env.yml
     environment:
@@ -18,6 +19,7 @@ functions:
     lang: dockerfile
     handler: ./sonic-annotator
     image: jpauwels/faas-sonic-annotator:latest
+    readonly_root_filesystem: false
     environment:
       read_timeout: 300s
       write_timeout: 300s
@@ -27,6 +29,7 @@ functions:
     lang: dockerfile
     handler: ./confident-chord-estimator
     image: jpauwels/faas-confident-chord-estimator:latest
+    readonly_root_filesystem: false
     environment:
       read_timeout: 300s
       write_timeout: 300s
@@ -36,6 +39,7 @@ functions:
     lang: dockerfile
     handler: ./instrument-identifier
     image: jpauwels/faas-instrument-identifier
+    readonly_root_filesystem: false
     environment:
       read_timeout: 300s
       write_timeout: 300s
@@ -45,19 +49,21 @@ functions:
     lang: dockerfile
     handler: ./essentia
     image: jpauwels/faas-essentia:latest
+    readonly_root_filesystem: false
     environment:
       read_timeout: 300s
       write_timeout: 300s
       combine_output: false
       write_debug: false
   ac-search:
-    lang: python3
+    lang: python3-binary
     handler: ./ac-search
     image: jpauwels/faas-ac-search:latest
+    readonly_root_filesystem: false
     environment_file:
      - env.yml
     environment:
-      read_timeout: 30s
-      write_timeout: 30s
+      read_timeout: 300s
+      write_timeout: 300s
       combine_output: false
       write_debug: false

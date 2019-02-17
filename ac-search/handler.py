@@ -2,9 +2,11 @@ import os
 import sys
 import json
 import re
+import requests
+from requests.exceptions import HTTPError
 import pymongo
 from bson.son import SON
-from urllib.parse import parse_qs
+from urllib.parse import parse_qsl, unquote
 
 
 descriptors = ['chords', 'tempo', 'tuning', 'global-key']
@@ -15,72 +17,99 @@ _chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
 _client = None
 
 
-def handle(_):
+def handle(audio_content):
     """handle a request to the function
     Args:
         req (str): request body
     """
-    args = parse_qs(os.getenv('Http_Query'), keep_blank_values=True)
-    unknown_descriptors = list(filter(lambda d: d not in descriptors+['providers'], args.keys()))
-    if unknown_descriptors:
-        return json.dumps('Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
-        's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(descriptors)))
-
-    paging = os.getenv('Http_Path')[1:].split('/')
     try:
-        num_results = int(paging[0]) if len(paging) > 0 and paging[0] else 1
-        offset = int(paging[1]) if len(paging) > 1 and paging[1] else 0
-    except ValueError:
-        return json.dumps('Invalid paging controls "{}". The correct syntax is "ac-search[/<num-results>[/<offset>]]"'.format(paging))
+        query = dict(parse_qsl(unquote(os.getenv('Http_Query', '')), keep_blank_values=True))
+        unknown_descriptors = list(filter(lambda d: d not in descriptors+['providers'], query.keys()))
+        if unknown_descriptors:
+            raise HTTPError('Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
+            's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(descriptors)))
 
-    return json.dumps(search(args, num_results, offset))
+        paging = os.getenv('Http_Path', '').lstrip('/').split('/')
+        try:
+            num_results = int(paging[0]) if len(paging) > 0 and paging[0] else 1
+            offset = int(paging[1]) if len(paging) > 1 and paging[1] else 0
+        except ValueError:
+            raise HTTPError('Invalid paging controls "{}". The correct syntax is "ac-search[/<num-results>[/<offset>]]"'.format(paging))
+
+        if audio_content:
+            query = text_search_params(audio_content, query)
+        return json.dumps(search(query, num_results, offset))
+    except HTTPError as e:
+        return json.dumps(str(e))
+
+def text_search_params(audio_content, audio_query):
+    text_params = {}
+    for descriptor, audio_params in audio_query.items():
+        if descriptor == 'providers':
+            text_params[descriptor] = audio_params
+        else:
+            descriptor_response = requests.get('http://gateway:8080/function/ac-analysis/{}'.format(descriptor), data=audio_content)
+            descriptor_response.raise_for_status()
+            file_descriptor = descriptor_response.json()
+            if descriptor in ['tempo', 'tuning']:
+                if audio_params == '':
+                    text_params[descriptor] = ''
+                elif audio_params[0] in ['<', '>']:
+                    text_params[descriptor] = '{}{}'.format(audio_params, file_descriptor[descriptor])
+                else:
+                    text_params[descriptor] = '{}{}'.format(file_descriptor[descriptor], audio_params)
+            elif descriptor == 'global-key':
+                text_params['global-key'] = file_descriptor['global-key']['key'].replace(" ", "")
+            elif descriptor == 'chords':
+                chord_set = set([c['label'] for c in file_descriptor['chords']['chordSequence']])
+                text_params[descriptor] = '-'.join(list(chord_set))
+                if audio_params:
+                    text_params[descriptor] += ',{}'.format(audio_params)
+
+    sys.stderr.write('Performing textual descriptor search with {}\n'.format(text_params))
+    return text_params
 
 
-def search(args, num_results, offset):
+def search(text_query, num_results, offset):
     agg_pipeline = []
-    projection = {}
+    projection = {'_id': False, 'id': '$_id'}
 
-    try:
-        if 'providers' in args:
-            allowed_providers = args['providers'][0].split(',')
-            unknown_providers = list(filter(lambda p: p not in all_providers, allowed_providers))
-            if unknown_providers:
-                return json.dumps('Unknown content provider{} "{}". Allowed content providers are : "{}"'.format(
-                's' if len(unknown_providers) > 1 else '', '", "'.join(unknown_providers), '", "'.join(all_providers)))
-            agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_providers)}}})
-        if 'tempo' in args:
-            param = args['tempo'][0]
-            if param:
-                agg_pipeline.extend(_parse_single_number_query('tempo', param, 'essentia-music.rhythm.bpm'))
-            projection['tempo'] = '$essentia-music.rhythm.bpm'
-        if 'tuning' in args:
-            param = args['tuning'][0]
-            if param:
-                agg_pipeline.extend(_parse_single_number_query('tuning', param, 'essentia-music.tonal.tuning_frequency'))
-            projection['tuning'] = '$essentia-music.tonal.tuning_frequency'
-        if 'global-key' in args:
-            param = args['global-key'][0]
-            if param:
-                agg_pipeline.extend(_parse_key_query(param))
-            else:
-                agg_pipeline.append({'$addFields': {'key_best_matching':
-                    {'$let': {'vars': {'allKeys': ['$essentia-music.tonal.key_{}'.format(k) for k in _key_variants]},
-                              'in': {'$arrayElemAt': ['$$allKeys', {'$indexOfArray': ['$$allKeys.strength', {'$max': ['$$allKeys.strength']}]}]}}}
-                }})
-            projection['global-key'] = {'key': {'$concat': ['$key_best_matching.key', ' ', '$key_best_matching.scale']}, 
-                                        'confidence': '$key_best_matching.strength'}
-        if 'chords' in args:
-            param = args['chords'][0]
-            if param:
-                agg_pipeline.extend(_parse_chord_query(param))
-            agg_pipeline.append({'$project': {'chords.distinctChords': False, 'chords.chordRatio': False}})
-            projection['chords'] = True
-    except SyntaxError as e:
-        return str(e)
+    if 'providers' in text_query:
+        allowed_providers = text_query['providers'].split(',')
+        unknown_providers = list(filter(lambda p: p not in all_providers, allowed_providers))
+        if unknown_providers:
+            raise HTTPError('Unknown content provider{} "{}". Allowed content providers are : "{}"'.format(
+            's' if len(unknown_providers) > 1 else '', '", "'.join(unknown_providers), '", "'.join(all_providers)))
+        agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_providers)}}})
+    if 'tempo' in text_query:
+        param = text_query['tempo']
+        if param:
+            agg_pipeline.extend(_parse_single_number_query('tempo', param, 'essentia-music.rhythm.bpm'))
+        projection['tempo'] = '$essentia-music.rhythm.bpm'
+    if 'tuning' in text_query:
+        param = text_query['tuning']
+        if param:
+            agg_pipeline.extend(_parse_single_number_query('tuning', param, 'essentia-music.tonal.tuning_frequency'))
+        projection['tuning'] = '$essentia-music.tonal.tuning_frequency'
+    if 'global-key' in text_query:
+        param = text_query['global-key']
+        if param:
+            agg_pipeline.extend(_parse_key_query(param))
+        else:
+            agg_pipeline.append({'$addFields': {'key_best_matching':
+                {'$let': {'vars': {'allKeys': ['$essentia-music.tonal.key_{}'.format(k) for k in _key_variants]},
+                            'in': {'$arrayElemAt': ['$$allKeys', {'$indexOfArray': ['$$allKeys.strength', {'$max': ['$$allKeys.strength']}]}]}}}
+            }})
+        projection['global-key'] = {'key': {'$concat': ['$key_best_matching.key', ' ', '$key_best_matching.scale']}, 
+                                    'confidence': '$key_best_matching.strength'}
+    if 'chords' in text_query:
+        param = text_query['chords']
+        if param:
+            agg_pipeline.extend(_parse_chord_query(param))
+        agg_pipeline.append({'$project': {'chords.distinctChords': False, 'chords.chordRatio': False}})
+        projection['chords'] = True
     
     agg_pipeline.extend([{'$skip': offset}, {'$limit': num_results}])
-    if not projection:
-        projection['_id'] = True
     agg_pipeline.append({'$project': projection})
 
     cursor = _get_db().descriptors.aggregate(agg_pipeline, allowDiskUse=True)
@@ -118,7 +147,7 @@ def _parse_single_number_query(descriptor, param, mongo_field):
                     {'$addFields': {'distance': {'$abs': {'$subtract': [target_value, '${}'.format(mongo_field)]}}}},
                     {'$sort': {'distance': pymongo.ASCENDING}}]
     except (ValueError, IndexError):
-        raise SyntaxError('The {} search parameters need to be of the form "[<|>|<=|>=]<value>", "<min>-<max>" or "<value>+-<tolerance>%"'.format(descriptor))
+        raise HTTPError('The {} search parameters need to be of the form "[<|>|<=|>=]<value>", "<min>-<max>" or "<value>+-<tolerance>%"'.format(descriptor))
 
 
 def _parse_key_query(param):
@@ -127,7 +156,7 @@ def _parse_key_query(param):
         tonic = split_key.group(1)
         scale = split_key.group(2)
     except AttributeError:
-        raise SyntaxError('The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]')
+        raise HTTPError('The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]')
     match_list = [dict() for k in _key_variants]
     filter_list = []
     if tonic:
@@ -153,11 +182,11 @@ def _parse_chord_query(param):
     params = param.split(',')
     chords = params[0].split('-')
     if not all([_chord_regex.match(c) for c in chords]):
-        raise SyntaxError('The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens')
+        raise HTTPError('The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens')
     if len(params) > 1 and params[1]:
         coverage = float(params[1][:-1]) / 100
         if not params[1].endswith('%') or coverage > 1 or coverage < 0:
-            raise SyntaxError('The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign')
+            raise HTTPError('The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign')
     else:
         coverage = 1.
     return [

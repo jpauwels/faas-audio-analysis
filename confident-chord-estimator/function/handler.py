@@ -6,11 +6,12 @@ import json
 import madmom
 from scipy.linalg import circulant
 import itertools
-import urllib.parse
+import os
 import os.path
 import requests
 from collections import defaultdict
 from hiddini import HMMTemplateCosSim
+# import io
 
 
 # Config
@@ -50,8 +51,8 @@ class MadMomDeepChromaExtractor:
         start_times = self.step_size / self.samplerate * np.arange(len(chromagram)) - self.frame_size/(2*self.samplerate)
         return start_times, start_times+self.frame_size/self.samplerate
 
-    def __call__(self, audiopath):
-        signal = madmom.audio.Signal(audiopath, num_channels=1)
+    def __call__(self, audio_file):
+        signal = madmom.audio.Signal(audio_file, num_channels=1)
         duration = signal.num_samples / signal.sample_rate
         framed_signal = self.frame_cutter(signal)
         frame_spls = framed_signal.sound_pressure_level()
@@ -70,8 +71,8 @@ class ChordEstimator:
         np.fill_diagonal(trans_prob, chord_self_prob)
         self.hmm = HMMTemplateCosSim(chord_templates, trans_prob, np.full(num_chords, 1/num_chords))
     
-    def __call__(self, audio_path):
-        chromagram, (start_times, end_times), duration, frame_spls = self.chroma_extractor(audio_path)
+    def __call__(self, audio_file):
+        chromagram, (start_times, end_times), duration, frame_spls = self.chroma_extractor(audio_file)
         hmm_smoothed_state_indices, _, confidence = self.hmm.decode_with_PPD(chromagram.T)
         squashed_start_times, squashed_end_times, squashed_chord_labels = squash_timed_labels(start_times, end_times, self.chords[hmm_smoothed_state_indices])
         return squashed_start_times, squashed_end_times, squashed_chord_labels, confidence, duration, frame_spls
@@ -81,34 +82,26 @@ cp = MadMomDeepChromaExtractor(samplerate, block_size, step_size)
 hmm = ChordEstimator(chromas, chord_types, type_templates, cp, chord_self_prob)
 
 
-def handle(req):
+def handle(audio_content):
     """handle a request to the function
     Args:
-        req (str): request body
+        audio_content (bytes): audio bytestream
     """
-    p = urllib.parse.urlparse(req)
-    if p.scheme.startswith('http'):
-        audio_path = os.path.join(os.getcwd(), os.path.basename(p.path))
-        sys.stderr.write('Downloading {} and writing to {}\n'.format(req, audio_path))
-        with open(audio_path, 'wb') as audio_file:
-            audio_file.write(requests.get(req).content)
-    else:
-        audio_path = req
+    audio_path = os.getenv('Http_Path', '').lstrip('/')
+    if not audio_path:
+        audio_path = 'audio'
+    try:
+        os.makedirs(os.path.dirname(audio_path), exist_ok=True)
+    except FileNotFoundError:
+        pass
+    with open(audio_path, 'wb') as f:
+        f.write(audio_content)
     start_times, end_times, chord_labels, confidence, duration, frame_spls = hmm(audio_path)
+    # start_times, end_times, chord_labels, confidence, duration, frame_spls = hmm(io.BytesIO(audio_content))
     response = {'confidence': confidence, 'duration': duration, 'chordSequence': [], 'chordRatio': defaultdict(int)}
     for start, end, label in zip(start_times, end_times, chord_labels):
         response['chordSequence'].append({'start': start, 'end': end, 'label': label})
         response['chordRatio'][label] += end - start
     response['chordRatio'].update({k: v/end for k, v in response['chordRatio'].items()})
     response['distinctChords'] = len(response['chordRatio'])
-    if p.scheme.startswith('http'):
-        os.remove(audio_path)
-        sys.stderr.write('Deleted {}\n'.format(audio_path))
     return json.dumps(response)
-
-
-if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        sys.stderr.write('Specify a single audio uri as input')
-    else:
-        print(handle(sys.argv[1]))

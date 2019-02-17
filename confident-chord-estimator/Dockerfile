@@ -1,16 +1,26 @@
 FROM ubuntu:18.04
 
+# Add watchdog
+RUN apt-get update -y \
+&&  apt-get install -y curl \
+&& curl -sSL https://github.com/openfaas/faas/releases/download/0.9.6/fwatchdog > /usr/bin/fwatchdog \
+&& chmod +x /usr/bin/fwatchdog \
+&& apt-get autoremove --purge -y curl \
+&&  apt-get clean \
+&&  rm -rf /var/lib/apt/lists/*
+
 # Install build dependencies
 RUN apt-get update -y \
 &&  apt-get install -y build-essential python3 python3-pip ffmpeg git \
 &&  apt-get clean \
 &&  rm -rf /var/lib/apt/lists/*
 
+# Add non-root user
+RUN addgroup --system app && adduser --system --ingroup app app
+
 # Copy function files
-RUN mkdir -p /home/app
 WORKDIR /home/app
-COPY index.py index.py
-COPY function /home/app/function/
+COPY function/requirements.txt function/requirements.txt
 
 # Install Python dependencies
 RUN pip3 install --no-cache-dir -r function/requirements.txt
@@ -26,18 +36,10 @@ RUN apt-get update -y \
 &&  apt-get clean \
 &&  rm -rf /var/lib/apt/lists/*
 
-# Add watchdog
-RUN apt-get update -y \
-&&  apt-get install -y curl \
-&& curl -sSL https://github.com/openfaas/faas/releases/download/0.9.6/fwatchdog > /usr/bin/fwatchdog \
-&& chmod +x /usr/bin/fwatchdog \
-&& apt-get autoremove --purge -y curl \
-&&  apt-get clean \
-&&  rm -rf /var/lib/apt/lists/*
-
-# Add non root user
-RUN addgroup --system app && adduser --system --ingroup app app
-RUN chown -R app:app ./
+COPY index.py index.py
+COPY function/*.py function/
+RUN touch function/__init__.py
+RUN chown -R app:app .
 USER app
 
 # Populate example here - i.e. "cat", "sha512sum" or "node index.js"

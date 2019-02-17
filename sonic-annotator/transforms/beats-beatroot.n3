@@ -4,6 +4,7 @@
 
 :transform a vamp:Transform ;
     vamp:plugin <http://vamp-plugins.org/rdf/plugins/beatroot-vamp#beatroot> ;
+    vamp:sample_rate "44100"^^xsd:int ;
     vamp:step_size "441"^^xsd:int ; 
     vamp:block_size "2048"^^xsd:int ; 
     vamp:plugin_version """1""" ; 

@@ -4,6 +4,7 @@
 
 :transform a vamp:Transform ;
     vamp:plugin <http://vamp-plugins.org/rdf/plugins/qm-vamp-plugins#qm-keydetector> ;
+    vamp:sample_rate "44100"^^xsd:int ;
     vamp:step_size "32768"^^xsd:int ; 
     vamp:block_size "32768"^^xsd:int ; 
     vamp:plugin_version """4""" ; 

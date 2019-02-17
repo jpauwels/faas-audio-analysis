@@ -4,17 +4,15 @@
 import sys
 from function import handler
 
-def get_stdin():
-    buf = ""
-    while(True):
-        line = sys.stdin.readline()
-        buf += line
-        if line=="":
-            break
-    return buf
-
-if(__name__ == "__main__"):
-    st = get_stdin()
+if __name__ == "__main__":
+    st = sys.stdin.buffer.read()
+    try:
+        st = st.decode()
+    except UnicodeDecodeError:
+        pass
     ret = handler.handle(st)
     if ret != None:
-        print(ret)
+        if type(ret) == 'bytes':
+            sys.stdout.buffer.write(ret)
+        else:
+            sys.stdout.write(ret)

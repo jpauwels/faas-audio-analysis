@@ -19,7 +19,10 @@ RUN mkdir /home/app/transforms && mv /root/*.n3 /home/app/transforms/ && chown -
 USER app
 WORKDIR /home/app
 
+COPY entrypoint.sh entrypoint.sh
+WORKDIR /tmp
+
 # Populate example here - i.e. "cat", "sha512sum" or "node index.js"
-ENV fprocess="xargs sonic-annotator"
+ENV fprocess="/home/app/entrypoint.sh"
 HEALTHCHECK --interval=5s CMD [ -e /tmp/.lock ] || exit 1
 CMD [ "fwatchdog" ]

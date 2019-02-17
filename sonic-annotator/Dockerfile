@@ -20,8 +20,10 @@ WORKDIR /home/app
 USER app
 
 COPY transforms transforms
+COPY entrypoint.sh entrypoint.sh
+WORKDIR /tmp
 
 # Populate example here - i.e. "cat", "sha512sum" or "node index.js"
-ENV fprocess="xargs sonic-annotator"
+ENV fprocess="/home/app/entrypoint.sh"
 HEALTHCHECK --interval=5s CMD [ -e /tmp/.lock ] || exit 1
 CMD [ "fwatchdog" ]
