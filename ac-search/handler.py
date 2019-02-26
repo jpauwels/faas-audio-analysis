@@ -42,29 +42,31 @@ def handle(audio_content):
     except HTTPError as e:
         return json.dumps(str(e))
 
+
 def text_search_params(audio_content, audio_query):
+    analysis_descriptors = [k for k,v in audio_query.items() if k != 'providers' and (k not in ['tempo', 'tuning'] or v)]
+    analysis_response = requests.get('http://gateway:8080/function/ac-analysis/{}'.format('/'.join(analysis_descriptors)), data=audio_content)
+    analysis_response.raise_for_status()
+    query_descriptors = analysis_response.json()
+
     text_params = {}
     for descriptor, audio_params in audio_query.items():
         if descriptor == 'providers':
             text_params[descriptor] = audio_params
-        else:
-            descriptor_response = requests.get('http://gateway:8080/function/ac-analysis/{}'.format(descriptor), data=audio_content)
-            descriptor_response.raise_for_status()
-            file_descriptor = descriptor_response.json()
-            if descriptor in ['tempo', 'tuning']:
-                if audio_params == '':
-                    text_params[descriptor] = ''
-                elif audio_params[0] in ['<', '>']:
-                    text_params[descriptor] = '{}{}'.format(audio_params, file_descriptor[descriptor])
-                else:
-                    text_params[descriptor] = '{}{}'.format(file_descriptor[descriptor], audio_params)
-            elif descriptor == 'global-key':
-                text_params['global-key'] = file_descriptor['global-key']['key'].replace(" ", "")
-            elif descriptor == 'chords':
-                chord_set = set([c['label'] for c in file_descriptor['chords']['chordSequence']])
-                text_params[descriptor] = '-'.join(list(chord_set))
-                if audio_params:
-                    text_params[descriptor] += ',{}'.format(audio_params)
+        elif descriptor in ['tempo', 'tuning']:
+            if audio_params == '':
+                text_params[descriptor] = ''
+            elif audio_params[0] in ['<', '>']:
+                text_params[descriptor] = '{}{}'.format(audio_params, query_descriptors[descriptor])
+            else:
+                text_params[descriptor] = '{}{}'.format(query_descriptors[descriptor], audio_params)
+        elif descriptor == 'global-key':
+            text_params['global-key'] = query_descriptors['global-key']['key'].replace(" ", "")
+        elif descriptor == 'chords':
+            chord_set = set([c['label'] for c in query_descriptors['chords']['chordSequence']])
+            text_params[descriptor] = '-'.join(list(chord_set))
+            if audio_params:
+                text_params[descriptor] += ',{}'.format(audio_params)
 
     sys.stderr.write('Performing textual descriptor search with {}\n'.format(text_params))
     return text_params
@@ -183,12 +185,15 @@ def _parse_chord_query(param):
     chords = params[0].split('-')
     if not all([_chord_regex.match(c) for c in chords]):
         raise HTTPError('The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens')
-    if len(params) > 1 and params[1]:
-        coverage = float(params[1][:-1]) / 100
-        if not params[1].endswith('%') or coverage > 1 or coverage < 0:
-            raise HTTPError('The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign')
-    else:
+    if len(params) == 1:
         coverage = 1.
+    else:
+        try:
+            coverage = float(params[1][:-1]) / 100
+            if len(params) > 2 or not params[1].endswith('%') or coverage > 1 or coverage < 0:
+                raise ValueError
+        except ValueError:
+            raise HTTPError('The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign and separated from the chords by a single comma')
     return [
         {
             '$addFields':
@@ -212,4 +217,4 @@ def _get_db():
         sys.stderr.write('Connecting to DB\n')
         _client = pymongo.MongoClient(os.getenv('MONGO_CONNECTION'))
     sys.stderr.write('Connected to DB: {}\n'.format(_client))
-    return _client.ac_analysis_service
+    return _client.audiocommons

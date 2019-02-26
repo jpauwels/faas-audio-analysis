@@ -5,22 +5,21 @@ import pymongo
 import requests
 from requests.exceptions import HTTPError
 import os.path
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urlsplit, unquote
 from .config import providers, audio_uri
 from . import ld_converter
 
 
-descriptors = ['chords', 'instruments', 'beats-beatroot', 'keys', 'tempo', 'global-key', 'tuning', 'beats']
+all_descriptors = ['chords', 'instruments', 'keys', 'tempo', 'global-key', 'tuning', 'beats']
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
 supported_output = {'chords': ['application/json', 'application/ld+json'],
                     'instruments': ['application/json'],
-                    'beats-beatroot': ['application/json', 'application/ld+json'],
                     'keys': ['application/json'],
                     'tempo': ['application/json'],
                     'global-key': ['application/json'],
                     'tuning': ['application/json'],
                     'beats': ['application/json'],
-                    } # default output first
+                    }
 _client = None
 _instrument_names = ['Shaker', 'Electronic Beats', 'Drum Kit', 'Synthesizer', 'Female Voice', 'Male Voice', 'Violin', 'Flute', 'Harpsichord', 'Electric Guitar', 'Clarinet', 'Choir', 'Organ', 'Acoustic Guitar', 'Viola', 'French Horn', 'Piano', 'Cello', 'Harp', 'Conga', 'Synthetic Bass', 'Electric Piano', 'Acoustic Bass', 'Electric Bass']
 
@@ -29,64 +28,90 @@ def handle(audio_content):
     """handle a request to the function
     """
     try:
-        descriptor = os.getenv('Http_Path', '').lstrip('/')
-        if descriptor == 'providers':
+        descriptors = os.getenv('Http_Path', '').lstrip('/').split('/')
+        if 'providers' in descriptors:
             return json.dumps(providers)
-        elif descriptor == 'descriptors':
-            return json.dumps(descriptors)
-        elif descriptor not in descriptors:
-            raise HTTPError('Unknown descriptor "{}". Allowed descriptors are : {}'.format(descriptor, descriptors))
+        elif 'descriptors' in descriptors:
+            return json.dumps(all_descriptors)
 
-        content_type = os.getenv('Http_Content_Type')
-        if content_type:
-            if content_type not in supported_output[descriptor]:
-                raise HTTPError('Only {} content-type{} are supported for the "{}" descriptor'.format(
-                '"'+'", "'.join(supported_output[descriptor])+'"',
-                's' if len(supported_output[descriptor]) > 1 else '',
-                descriptor))
-        else:
-            content_type = supported_output[descriptor][0]
+        unknown_descriptors = list(filter(lambda d: d not in all_descriptors, descriptors))
+        if unknown_descriptors:
+            raise HTTPError('Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
+            's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(all_descriptors)))
 
-        query = dict(parse_qsl(os.getenv('Http_Query')))
+        content_type = os.getenv('Http_Content_Type', 'application/json')
+        unsupported_output = list(filter(lambda d: content_type not in supported_output[d], descriptors))
+        if unsupported_output:
+            raise HTTPError('Unsupported Content-Type "{}" for descriptor{} "{}"'.format(
+            content_type, 
+            's' if len(unsupported_output) > 1 else '',
+            '"'+'", "'.join(unsupported_output)+'"'
+            ))
 
-        req_descriptor = 'essentia-music' if descriptor in ['tempo', 'global-key', 'tuning', 'beats'] else descriptor
+        query = dict(parse_qsl(unquote(os.getenv('Http_Query', ''))))
+
+        essentia_descriptors = []
+        req_descriptors = []
+        for descriptor in descriptors:
+            if descriptor in ['tempo', 'global-key', 'tuning', 'beats']:
+                essentia_descriptors.append(descriptor)
+            else:
+                req_descriptors.append(descriptor)
+        if essentia_descriptors:
+            req_descriptors.append('essentia-music')
+        
+        response = {}
         if audio_content:
             file_id = query.get('id', 'undefined')
-            response = calculate_descriptor(file_id, audio_content, req_descriptor)
         elif 'id' in query:
             file_id = query['id']
-            response = get_descriptor(file_id, req_descriptor)
         else:
             raise HTTPError('Nothing to do')
-        response = rewrite_descriptor_output(descriptor, response)
         response['id'] = file_id
+
+        for descriptor in req_descriptors:
+            if audio_content:
+                result = calculate_descriptor(file_id, audio_content, descriptor)
+            else:
+                result = get_descriptor(file_id, descriptor)
+            if descriptor == 'essentia-music':
+                response.update(essentia_descriptor_output(essentia_descriptors, result))
+            else:
+                response[descriptor] = rewrite_descriptor_output(descriptor, result)
         
         if content_type == 'application/json':
             return json.dumps(response)
         elif content_type == 'application/ld+json':
-            return json.dumps(ld_converter.convert(descriptor, response, 'json-ld'))
+            return json.dumps(ld_converter.convert(descriptors, response, 'json-ld'))
     except HTTPError as e:
         return json.dumps(str(e))
 
 
-def rewrite_descriptor_output(descriptor, response):
-    if descriptor == 'tempo':
-        response = {'tempo': response['rhythm']['bpm']}
-    elif descriptor == 'global-key':
-        most_likely_key = sorted([v for k, v in response['tonal'].items() if k.startswith('key_')], key=lambda v: v['strength'], reverse=True)[0]
-        response = {'global-key': {'key': most_likely_key['key']+' '+most_likely_key['scale'], 'confidence': most_likely_key['strength']}}
-    elif descriptor == 'tuning':
-        response = {'tuning': response['tonal']['tuning_frequency']}
-    elif descriptor == 'beats':
-        response = {'beats': response['rhythm']['beats_position']}
-    elif descriptor == 'instruments':
-        response = {'instruments': {k:v for k,v in zip(_instrument_names, response['annotations'][0]['data'][0]['value'])}}
+def essentia_descriptor_output(essentia_descriptors, result):
+    response = {}
+    if 'tempo' in essentia_descriptors:
+        response['tempo'] = result['rhythm']['bpm']
+    if 'global-key' in essentia_descriptors:
+        most_likely_key = sorted([v for k, v in result['tonal'].items() if k.startswith('key_')], key=lambda v: v['strength'], reverse=True)[0]
+        response['global-key'] = {'key': most_likely_key['key']+' '+most_likely_key['scale'], 'confidence': most_likely_key['strength']}
+    if 'tuning' in essentia_descriptors:
+        response['tuning'] = result['tonal']['tuning_frequency']
+    if 'beats' in essentia_descriptors:
+        response['beats'] = result['rhythm']['beats_position']
+    return response
+
+
+def rewrite_descriptor_output(descriptor, result):
+    if descriptor == 'instruments':
+        response = {k:v for k,v in zip(_instrument_names, result['annotations'][0]['data'][0]['value'])}
     elif descriptor == 'chords':
-        response.pop('chordRatio')
-        response.pop('distinctChords')
-        response = {'chords': response}
+        result.pop('chordRatio')
+        result.pop('distinctChords')
+        response = result
     elif descriptor == 'keys':
-        response = {'keys': [{'time': k['time'], 'label': k['label']} for k in response['annotations'][0]['data']]}
+        response = [{'time': k['time'], 'label': k['label']} for k in result['annotations'][0]['data']]
+    else:
+        response = result
     return response
 
 
@@ -138,4 +163,4 @@ def _get_db():
         sys.stderr.write('Connecting to DB\n')
         _client = pymongo.MongoClient(os.getenv('MONGO_CONNECTION'))
     sys.stderr.write('Connected to DB: {}\n'.format(_client))
-    return _client.ac_analysis_service
+    return _client.audiocommons
