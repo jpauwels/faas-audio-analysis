@@ -10,7 +10,10 @@ from urllib.parse import parse_qsl, unquote
 
 
 descriptors = ['chords', 'tempo', 'tuning', 'global-key']
-all_providers = ['jamendo-tracks', 'freesound-sounds', 'europeana-res']
+all_collections = ['audiocommons', 'deezer', 'ilikemusic']
+namespaces = {'audiocommons': ['jamendo-tracks', 'freesound-sounds', 'europeana-res'],
+              'deezer': ['deezer'],
+              'ilikemusic': []}
 _key_regex = re.compile('^(A#|C#|D#|F#|G#|[A-G])?(major|minor)?$')
 _key_variants = ['edma', 'krumhansl', 'temperley']
 _chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
@@ -24,34 +27,36 @@ def handle(audio_content):
     """
     try:
         query = dict(parse_qsl(unquote(os.getenv('Http_Query', '')), keep_blank_values=True))
-        unknown_descriptors = list(filter(lambda d: d not in descriptors+['providers'], query.keys()))
+        unknown_descriptors = list(filter(lambda d: d not in descriptors+['namespaces'], query.keys()))
         if unknown_descriptors:
             raise HTTPError('Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
             's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(descriptors)))
 
-        paging = os.getenv('Http_Path', '').lstrip('/').split('/')
+        collection, *paging = os.getenv('Http_Path', '').lstrip('/').split('/')
+        if collection not in all_collections:
+            raise HTTPError('Unknown collection "{}"'.format(collection))
         try:
             num_results = int(paging[0]) if len(paging) > 0 and paging[0] else 1
             offset = int(paging[1]) if len(paging) > 1 and paging[1] else 0
         except ValueError:
-            raise HTTPError('Invalid paging controls "{}". The correct syntax is "ac-search[/<num-results>[/<offset>]]"'.format(paging))
+            raise HTTPError('Invalid paging controls "{}". The correct syntax is "search/<collection>[/<num-results>[/<offset>]]"'.format(paging))
 
         if audio_content:
             query = text_search_params(audio_content, query)
-        return json.dumps(search(query, num_results, offset))
+        return json.dumps(search(collection, query, num_results, offset))
     except HTTPError as e:
         return json.dumps(str(e))
 
 
 def text_search_params(audio_content, audio_query):
-    analysis_descriptors = [k for k,v in audio_query.items() if k != 'providers' and (k not in ['tempo', 'tuning'] or v)]
+    analysis_descriptors = [k for k,v in audio_query.items() if k != 'namespaces' and (k not in ['tempo', 'tuning'] or v)]
     analysis_response = requests.get('http://gateway:8080/function/analysis/{}'.format('/'.join(analysis_descriptors)), data=audio_content)
     analysis_response.raise_for_status()
     query_descriptors = analysis_response.json()
 
     text_params = {}
     for descriptor, audio_params in audio_query.items():
-        if descriptor == 'providers':
+        if descriptor == 'namespaces':
             text_params[descriptor] = audio_params
         elif descriptor in ['tempo', 'tuning']:
             if audio_params == '':
@@ -72,17 +77,17 @@ def text_search_params(audio_content, audio_query):
     return text_params
 
 
-def search(text_query, num_results, offset):
+def search(collection, text_query, num_results, offset):
     agg_pipeline = []
     projection = {'_id': False, 'id': '$_id'}
 
-    if 'providers' in text_query:
-        allowed_providers = text_query['providers'].split(',')
-        unknown_providers = list(filter(lambda p: p not in all_providers, allowed_providers))
-        if unknown_providers:
-            raise HTTPError('Unknown content provider{} "{}". Allowed content providers are : "{}"'.format(
-            's' if len(unknown_providers) > 1 else '', '", "'.join(unknown_providers), '", "'.join(all_providers)))
-        agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_providers)}}})
+    if 'namespaces' in text_query:
+        allowed_namespaces = text_query['namespaces'].split(',')
+        unknown_namespaces = list(filter(lambda p: p not in namespaces[collection], allowed_namespaces))
+        if unknown_namespaces:
+            raise HTTPError('Unknown namespace{} "{}". Allowed namespaces are : "{}"'.format(
+            's' if len(unknown_namespaces) > 1 else '', '", "'.join(unknown_namespaces), '", "'.join(namespaces[collection])))
+        agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_namespaces)}}})
     if 'tempo' in text_query:
         param = text_query['tempo']
         if param:
@@ -114,7 +119,7 @@ def search(text_query, num_results, offset):
     agg_pipeline.extend([{'$skip': offset}, {'$limit': num_results}])
     agg_pipeline.append({'$project': projection})
 
-    cursor = _get_db().descriptors.aggregate(agg_pipeline, allowDiskUse=True)
+    cursor = _get_client()[collection].descriptors.aggregate(agg_pipeline, allowDiskUse=True)
     return list(cursor)
 
 
@@ -211,10 +216,10 @@ def _parse_chord_query(param):
     ]
 
 
-def _get_db():
+def _get_client():
     global _client
     if _client is None:
         sys.stderr.write('Connecting to DB\n')
         _client = pymongo.MongoClient(os.getenv('MONGO_CONNECTION'))
     sys.stderr.write('Connected to DB: {}\n'.format(_client))
-    return _client.audiocommons
+    return _client

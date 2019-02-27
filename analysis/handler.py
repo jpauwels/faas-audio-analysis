@@ -6,7 +6,7 @@ import requests
 from requests.exceptions import HTTPError
 import os.path
 from urllib.parse import parse_qsl, urlsplit, unquote
-from .config import providers, audio_uri
+from . import config
 from . import ld_converter
 
 
@@ -28,16 +28,30 @@ def handle(audio_content):
     """handle a request to the function
     """
     try:
-        descriptors = os.getenv('Http_Path', '').lstrip('/').split('/')
-        if 'providers' in descriptors:
-            return json.dumps(providers)
-        elif 'descriptors' in descriptors:
-            return json.dumps(all_descriptors)
+        query = dict(parse_qsl(unquote(os.getenv('Http_Query', ''))))
+        if audio_content:
+            descriptors = os.getenv('Http_Path', '').lstrip('/').split('/')
+            named_id = query.get('id', 'undefined')
+        else:
+            collection, *descriptors = os.getenv('Http_Path', '').lstrip('/').split('/')
+            if collection not in config.all_collections:
+                raise HTTPError('Unknown collection "{}"'.format(collection))
+            if 'namespaces' in descriptors:
+                return json.dumps(config.namespaces[collection])
+            elif 'id' in query:
+                named_id = query['id']
+            else:
+                raise HTTPError('Nothing to do')
 
-        unknown_descriptors = list(filter(lambda d: d not in all_descriptors, descriptors))
-        if unknown_descriptors:
-            raise HTTPError('Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
-            's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(all_descriptors)))
+        if 'descriptors' in descriptors:
+            return json.dumps(all_descriptors)
+        elif 'all' in descriptors:
+            descriptors = all_descriptors
+        else:
+            unknown_descriptors = list(filter(lambda d: d not in all_descriptors, descriptors))
+            if unknown_descriptors:
+                raise HTTPError('Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
+                's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(all_descriptors)))
 
         content_type = os.getenv('Http_Content_Type', 'application/json')
         unsupported_output = list(filter(lambda d: content_type not in supported_output[d], descriptors))
@@ -47,8 +61,6 @@ def handle(audio_content):
             's' if len(unsupported_output) > 1 else '',
             '"'+'", "'.join(unsupported_output)+'"'
             ))
-
-        query = dict(parse_qsl(unquote(os.getenv('Http_Query', ''))))
 
         essentia_descriptors = []
         req_descriptors = []
@@ -60,20 +72,13 @@ def handle(audio_content):
         if essentia_descriptors:
             req_descriptors.append('essentia-music')
         
-        response = {}
-        if audio_content:
-            file_id = query.get('id', 'undefined')
-        elif 'id' in query:
-            file_id = query['id']
-        else:
-            raise HTTPError('Nothing to do')
-        response['id'] = file_id
+        response = {'id': named_id}
 
         for descriptor in req_descriptors:
             if audio_content:
-                result = calculate_descriptor(file_id, audio_content, descriptor)
+                result = calculate_descriptor(named_id, audio_content, descriptor)
             else:
-                result = get_descriptor(file_id, descriptor)
+                result = get_descriptor(collection, named_id, descriptor)
             if descriptor == 'essentia-music':
                 response.update(essentia_descriptor_output(essentia_descriptors, result))
             else:
@@ -115,26 +120,27 @@ def rewrite_descriptor_output(descriptor, result):
     return response
 
 
-def get_descriptor(linked_id, descriptor):
-    db = _get_db()
-    result = db.descriptors.find_one({'_id': linked_id, descriptor: {'$exists': True}})
+def get_descriptor(collection, named_id, descriptor):
+    db = _get_client()[collection]
+    try:
+        named_id = config.alias_id(collection, named_id, db)
+    except:
+        pass
+    result = db.descriptors.find_one({'_id': named_id, descriptor: {'$exists': True}})
     if result is not None:
         sys.stderr.write('Result found in DB\n')
         return result[descriptor]
 
     try:
-        provider, provider_id = linked_id.split(':')
-    except ValueError:
-        raise HTTPError('Malformed id "{}". Needs to be of the form "content-provider:provider-id"'.format(linked_id))
-    if provider not in providers:
-        raise HTTPError('Unknown content provider "{}". Allowed providers are : {}'.format(provider, providers))
-    uri = audio_uri(provider_id, provider)
+        uri = config.audio_uri(collection, named_id)
+    except Exception as e:
+        raise HTTPError(e)
     file_name = os.path.basename(urlsplit(uri).path)
     audio_content = requests.get(uri).content
 
     result_content = calculate_descriptor(file_name, audio_content, descriptor)
 
-    r = db.descriptors.update_one({'_id': linked_id}, {'$set': {descriptor: result_content}}, upsert=True)
+    r = db.descriptors.update_one({'_id': named_id}, {'$set': {descriptor: result_content}}, upsert=True)
     sys.stderr.write('Result stored in DB: {}\n'.format(r.raw_result))
     return result_content
 
@@ -157,10 +163,10 @@ def calculate_descriptor(file_name, audio_content, descriptor):
     return result.json()
 
 
-def _get_db():
+def _get_client():
     global _client
     if _client is None:
         sys.stderr.write('Connecting to DB\n')
         _client = pymongo.MongoClient(os.getenv('MONGO_CONNECTION'))
     sys.stderr.write('Connected to DB: {}\n'.format(_client))
-    return _client.audiocommons
+    return _client
