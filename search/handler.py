@@ -69,6 +69,7 @@ def text_search_params(audio_content, audio_query):
             text_params['global-key'] = query_descriptors['global-key']['key'].replace(" ", "")
         elif descriptor == 'chords':
             chord_set = set([c['label'] for c in query_descriptors['chords']['chordSequence']])
+            chord_set.discard('N')
             text_params[descriptor] = '-'.join(list(chord_set))
             if audio_params:
                 text_params[descriptor] += ',{}'.format(audio_params)
