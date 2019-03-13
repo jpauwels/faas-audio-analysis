@@ -10,7 +10,7 @@ import os.path
 import requests
 from collections import defaultdict
 from hiddini import HMMTemplateCosSim
-# import io
+import io
 
 
 # Config
@@ -95,17 +95,7 @@ def handle(audio_content):
     Args:
         audio_content (bytes): audio bytestream
     """
-    audio_path = os.getenv('Http_Path', '').lstrip('/')
-    if not audio_path:
-        audio_path = 'audio'
-    try:
-        os.makedirs(os.path.dirname(audio_path), exist_ok=True)
-    except FileNotFoundError:
-        pass
-    with open(audio_path, 'wb') as f:
-        f.write(audio_content)
-    start_times, end_times, chord_labels, confidence, duration = hmm(audio_path)
-    # start_times, end_times, chord_labels, confidence, duration = hmm(io.BytesIO(audio_content))
+    start_times, end_times, chord_labels, confidence, duration = hmm(io.BytesIO(audio_content))
     response = {'confidence': confidence, 'duration': duration, 'chordSequence': [], 'chordRatio': defaultdict(int)}
     for start, end, label in zip(start_times, end_times, chord_labels):
         response['chordSequence'].append({'start': start, 'end': end, 'label': label})
