@@ -23,7 +23,7 @@ def audio_uri(collection, linked_id):
         try:
             object_name = next(_cache_storage.list_objects(provider, prefix=object_prefix)).object_name
         except (StopIteration, minio.error.NoSuchBucket):
-            url = audiocommons_uri(provider_id, provider)
+            url = audiocommons_uri(provider, provider_id)
             r = requests.get(url)
             r.raise_for_status()
             try:
