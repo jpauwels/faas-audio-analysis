@@ -89,7 +89,8 @@ context = {
     "event": str(event),
     "timeline": str(timeline),
     "ns": str(ns),
-    "rdfs": str(RDFS)}
+    "rdfs": str(RDFS)
+}
 
 
 def json_sort(json_object, key_listing):
@@ -188,13 +189,13 @@ def convert_chords(result_dict, output_format):
     # building up the graph as suggested in
     result = URIRef("{}chords{}".format(str(ns), result_dict["id"]))
     g.add((result, RDF.type, afo.AudioFeature))
-    g.add((result, afo.confidence, Literal(result_dict["confidence"])))
+    g.add((result, afo.confidence, Literal(result_dict['chords']["confidence"])))
 
     collectionBnode = BNode()
     g.add((result, afo.collection, collectionBnode))
     g.add((collectionBnode, RDF.type, collection.Collection))
 
-    for seqID,seq in enumerate(result_dict["chordSequence"]):
+    for seqID,seq in enumerate(result_dict['chords']["chordSequence"]):
         seqURI = URIRef("{}seq{}".format(str(ns),seqID))
         g.add((collectionBnode, collection.hasElement, seqURI))
         g.add((seqURI, RDF.type, afo.AudioFeature))
