@@ -9,7 +9,7 @@ from bson.son import SON
 from urllib.parse import parse_qsl, unquote
 
 
-descriptors = ['chords', 'tempo', 'tuning', 'global-key']
+descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration']
 all_collections = ['audiocommons', 'deezer', 'ilikemusic']
 namespaces = {'audiocommons': ['jamendo-tracks', 'freesound-sounds', 'europeana-res'],
               'deezer': ['deezer'],
@@ -49,7 +49,7 @@ def handle(audio_content):
 
 
 def text_search_params(audio_content, audio_query):
-    analysis_descriptors = [k for k,v in audio_query.items() if k != 'namespaces' and (k not in ['tempo', 'tuning'] or v)]
+    analysis_descriptors = [k for k,v in audio_query.items() if k != 'namespaces' and (k not in ['tempo', 'tuning', 'duration'] or v)]
     analysis_response = requests.get('http://gateway:8080/function/analysis/{}'.format('/'.join(analysis_descriptors)), data=audio_content)
     analysis_response.raise_for_status()
     query_descriptors = analysis_response.json()
@@ -58,7 +58,7 @@ def text_search_params(audio_content, audio_query):
     for descriptor, audio_params in audio_query.items():
         if descriptor == 'namespaces':
             text_params[descriptor] = audio_params
-        elif descriptor in ['tempo', 'tuning']:
+        elif descriptor in ['tempo', 'tuning', 'duration']:
             if audio_params == '':
                 text_params[descriptor] = ''
             elif audio_params[0] in ['<', '>']:
@@ -89,6 +89,11 @@ def search(collection, text_query, num_results, offset):
             raise HTTPError('Unknown namespace{} "{}". Allowed namespaces are : "{}"'.format(
             's' if len(unknown_namespaces) > 1 else '', '", "'.join(unknown_namespaces), '", "'.join(namespaces[collection])))
         agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_namespaces)}}})
+    if 'duration' in text_query:
+        param = text_query['duration']
+        if param:
+            agg_pipeline.extend(_parse_single_number_query('duration', param, 'essentia-music.metadata.audio_properties.length'))
+        projection['duration'] = '$essentia-music.metadata.audio_properties.length'
     if 'tempo' in text_query:
         param = text_query['tempo']
         if param:
