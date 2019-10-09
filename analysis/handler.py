@@ -53,11 +53,13 @@ def handle(audio_content):
                 raise HTTPError('Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
                 's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(all_descriptors)))
 
-        content_type = os.getenv('Http_Content_Type', 'application/json')
-        unsupported_output = list(filter(lambda d: content_type not in supported_output[d], descriptors))
+        mime_type = os.getenv('Http_Accept', 'application/json')
+        if mime_type == '*/*':
+            mime_type = 'application/json'
+        unsupported_output = list(filter(lambda d: mime_type not in supported_output[d], descriptors))
         if unsupported_output:
-            raise HTTPError('Unsupported Content-Type "{}" for descriptor{} "{}"'.format(
-            content_type, 
+            raise HTTPError('Unsupported MIME type "{}" for descriptor{} "{}"'.format(
+            mime_type, 
             's' if len(unsupported_output) > 1 else '',
             '"'+'", "'.join(unsupported_output)+'"'
             ))
@@ -84,9 +86,9 @@ def handle(audio_content):
             else:
                 response[descriptor] = rewrite_descriptor_output(descriptor, result)
         
-        if content_type == 'application/json':
+        if mime_type == 'application/json':
             return json.dumps(response)
-        elif content_type == 'application/ld+json':
+        elif mime_type == 'application/ld+json':
             return json.dumps(ld_converter.convert(descriptors, response, 'json-ld'))
     except HTTPError as e:
         return json.dumps(str(e))
