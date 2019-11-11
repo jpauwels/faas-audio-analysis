@@ -4,6 +4,7 @@ import numpy as np
 import json
 import madmom
 from scipy.linalg import circulant
+from scipy.signal import medfilt
 import itertools
 import os
 import os.path
@@ -80,6 +81,7 @@ class ChordEstimator:
     def __call__(self, audio_file):
         chromagram, (start_times, end_times), duration, frame_spls = self.chroma_extractor(audio_file)
         silence_mask = frame_spls < silence_threshold
+        silence_mask = medfilt(silence_mask, 3).astype(bool)
         chromagram = chromagram[~silence_mask, :]
         hmm_smoothed_state_indices, _, confidence = self.hmm.decode_with_PPD(chromagram.T)
         squashed_start_times, squashed_end_times, squashed_chord_labels = squash_timed_labels(start_times, end_times, self.chords[hmm_smoothed_state_indices], silence_mask, 'N')
