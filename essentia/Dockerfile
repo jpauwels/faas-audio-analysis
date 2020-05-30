@@ -1,4 +1,4 @@
-FROM alpine:3.8 as builder
+FROM alpine:3.9 as builder
 
 RUN apk add --no-cache \
     build-base \
@@ -20,12 +20,12 @@ RUN cd chromaprint && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Releas
 RUN git clone https://github.com/jpauwels/gaia.git
 RUN apk add --no-cache qt-dev #swig libtbb-dev
 RUN cd gaia && python3 waf configure && python3 waf && python3 waf install # --with-tbb --with-python-bindings
-RUN git clone https://github.com/MTG/essentia.git
-RUN cd essentia && git checkout 133a0d3f9a14663fdd22c9dad24445998cbb8aae && python3 waf configure --build-static --with-examples --with-python  --with-gaia --with-vamp --with-cpptests \
+RUN git clone https://github.com/jpauwels/essentia.git
+RUN cd essentia && git checkout ed832509eb89dc63c8b1b69672fb90e8b3c50a46 && python3 waf configure --build-static --with-examples --with-python  --with-gaia --with-vamp --with-cpptests \
 &&  python3 waf install
 
 
-FROM alpine:3.8
+FROM alpine:3.9
 
 RUN apk add --no-cache \
     fftw \
@@ -63,6 +63,7 @@ RUN apk add --no-cache curl \
 RUN addgroup -S app && adduser app -S -G app
 WORKDIR /home/app
 COPY entrypoint.sh .
+COPY profile.yaml .
 RUN chown -R app:app .
 USER app
 

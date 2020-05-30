@@ -1,0 +1,12 @@
+lowlevel:
+    silentFrames: keep
+
+average_loudness:
+    silentFrames: keep
+
+rhythm:
+    method: multifeature
+
+tonal:
+    silentFrames: keep
+

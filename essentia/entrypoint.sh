@@ -20,7 +20,7 @@ fi
 
 # Call essentia with file path
 echo Calling essentia_streaming_extractor_music "${audio_path}" 1>&2
-essentia_streaming_extractor_music "${audio_path}" -
+essentia_streaming_extractor_music "${audio_path}" - profile.yaml
 error_code=$?
 
 # Clean up audio file
