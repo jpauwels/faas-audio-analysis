@@ -11,6 +11,10 @@ functions:
     environment_file:
      - env.yml
     environment:
+      CHORD_API: 'http://gateway:8080/function/confident-chord-estimator'
+      ESSENTIA_API: 'http://gateway:8080/function/essentia'
+      INSTRUMENTS_API: 'http://gateway:8080/function/instrument-identifier'
+      SONIC_ANNOTATOR_API: 'http://gateway:8080/function/sonic-annotator'
       read_timeout: 330s
       write_timeout: 330s
       combine_output: false
@@ -63,6 +67,7 @@ functions:
     environment_file:
      - env.yml
     environment:
+      ANALYSIS_API: 'http://gateway:8080/function/analysis'
       read_timeout: 300s
       write_timeout: 300s
       combine_output: false

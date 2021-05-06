@@ -150,15 +150,15 @@ def get_descriptor(collection, named_id, descriptor):
 def calculate_descriptor(file_name, audio_content, descriptor):
     file_name = file_name.lstrip('/')
     if descriptor == 'chords':
-        result = requests.get('http://gateway:8080/function/confident-chord-estimator/{}'.format(file_name), data=audio_content)
+        result = requests.get(f"{os.getenv('CHORD_API')}/{file_name}", data=audio_content)
     elif descriptor == 'essentia-music':
-        result = requests.get('http://gateway:8080/function/essentia/{}'.format(file_name), data=audio_content)
+        result = requests.get(f"{os.getenv('ESSENTIA_API')}/{file_name}", data=audio_content)
     elif descriptor == 'instruments':
         sa_arg = {'-t': '/home/app/transforms/instrument-probabilities.n3', '-w': 'jams', '--jams-stdout': ''}
-        result = requests.get('http://gateway:8080/function/instrument-identifier/{}'.format(file_name), data=audio_content, params=sa_arg)
+        result = requests.get(f"{os.getenv('INSTRUMENTS_API')}/{file_name}", data=audio_content, params=sa_arg)
     else:
         sa_arg = {'-t': '/home/app/transforms/{}.n3'.format(descriptor), '-w': 'jams', '--jams-stdout': ''}
-        result = requests.get('http://gateway:8080/function/sonic-annotator/{}'.format(file_name), data=audio_content, params=sa_arg)
+        result = requests.get(f"{os.getenv('SONIC_ANNOTATOR_API')}/{file_name}", data=audio_content, params=sa_arg)
 
     if result.status_code != requests.codes.ok or len(result.text) == 0:
         raise HTTPError('Calculation of "{}" failed'.format(descriptor))

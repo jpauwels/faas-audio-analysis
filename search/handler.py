@@ -50,7 +50,7 @@ def handle(audio_content):
 
 def text_search_params(audio_content, audio_query):
     analysis_descriptors = [k for k,v in audio_query.items() if k != 'namespaces' and (k not in ['tempo', 'tuning', 'duration'] or v)]
-    analysis_response = requests.get('http://gateway:8080/function/analysis/{}'.format('/'.join(analysis_descriptors)), data=audio_content)
+    analysis_response = requests.get(f"{os.getenv('ANALYSIS_API')}/{'/'.join(analysis_descriptors)}", data=audio_content)
     analysis_response.raise_for_status()
     query_descriptors = analysis_response.json()
 
