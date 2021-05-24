@@ -16,11 +16,11 @@ def audio_uri(collection, linked_id):
 def validate_audiocommons_id(linked_id):
     try:
         provider, provider_id = linked_id.split(':')
-        return provider, provider_id
     except ValueError:
         raise ValueError('Malformed id "{}". Needs to be of the form "content-provider:provider-id"'.format(linked_id))
     if provider not in namespaces['audiocommons']:
         raise ValueError('Unknown content provider "{}". Allowed providers are : {}'.format(provider, namespaces['audiocommons']))
+    return provider, provider_id
 
 
 def audiocommons_uri(provider, provider_id):

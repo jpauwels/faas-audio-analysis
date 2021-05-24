@@ -39,14 +39,14 @@ def handle(audio_content):
                 raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
             if 'namespaces' in descriptors:
                 return json.dumps(config.namespaces[collection])
+            elif 'descriptors' in descriptors:
+                return json.dumps(all_descriptors)
             elif 'id' in query:
                 named_id = query['id']
             else:
                 raise HTTPError(204, 'Nothing to do')
 
-        if 'descriptors' in descriptors:
-            return json.dumps(all_descriptors)
-        elif 'all' in descriptors:
+        if 'all' in descriptors:
             descriptors = all_descriptors
         else:
             unknown_descriptors = list(filter(lambda d: d not in all_descriptors, descriptors))
