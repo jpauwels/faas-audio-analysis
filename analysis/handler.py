@@ -35,13 +35,13 @@ def handle(audio_content):
         else:
             collection, *descriptors = os.getenv('Http_Path', '').lstrip('/').split('/')
             if collection not in config.all_collections:
-                raise HTTPError('Unknown collection "{}"'.format(collection))
+                raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
             if 'namespaces' in descriptors:
                 return json.dumps(config.namespaces[collection])
             elif 'id' in query:
                 named_id = query['id']
             else:
-                raise HTTPError('Nothing to do')
+                raise HTTPError(204, 'Nothing to do')
 
         if 'descriptors' in descriptors:
             return json.dumps(all_descriptors)
@@ -50,7 +50,7 @@ def handle(audio_content):
         else:
             unknown_descriptors = list(filter(lambda d: d not in all_descriptors, descriptors))
             if unknown_descriptors:
-                raise HTTPError('Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
+                raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
                 's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(all_descriptors)))
 
         mime_type = os.getenv('Http_Accept', 'application/json')
@@ -58,7 +58,7 @@ def handle(audio_content):
             mime_type = 'application/json'
         unsupported_output = list(filter(lambda d: mime_type not in supported_output[d], descriptors))
         if unsupported_output:
-            raise HTTPError('Unsupported MIME type "{}" for descriptor{} "{}"'.format(
+            raise HTTPError(406, 'Unsupported MIME type "{}" for descriptor{} "{}"'.format(
             mime_type, 
             's' if len(unsupported_output) > 1 else '',
             '"'+'", "'.join(unsupported_output)+'"'
@@ -136,7 +136,7 @@ def get_descriptor(collection, named_id, descriptor):
     try:
         uri = config.audio_uri(collection, named_id)
     except Exception as e:
-        raise HTTPError(e)
+        raise HTTPError(404, str(e))
     file_name = os.path.basename(urlsplit(uri).path)
     audio_content = requests.get(uri).content
 
@@ -161,7 +161,7 @@ def calculate_descriptor(file_name, audio_content, descriptor):
         result = requests.get(f"{os.getenv('SONIC_ANNOTATOR_API')}/{file_name}", data=audio_content, params=sa_arg)
 
     if result.status_code != requests.codes.ok or len(result.text) == 0:
-        raise HTTPError('Calculation of "{}" failed'.format(descriptor))
+        raise HTTPError(502, 'Calculation of "{}" failed'.format(descriptor))
     return result.json()
 
 

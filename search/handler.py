@@ -29,17 +29,17 @@ def handle(audio_content):
         query = dict(parse_qsl(unquote(os.getenv('Http_Query', '')), keep_blank_values=True))
         unknown_descriptors = list(filter(lambda d: d not in descriptors+['namespaces'], query.keys()))
         if unknown_descriptors:
-            raise HTTPError('Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
+            raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
             's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(descriptors)))
 
         collection, *paging = os.getenv('Http_Path', '').lstrip('/').split('/')
         if collection not in all_collections:
-            raise HTTPError('Unknown collection "{}"'.format(collection))
+            raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
         try:
             num_results = int(paging[0]) if len(paging) > 0 and paging[0] else 1
             offset = int(paging[1]) if len(paging) > 1 and paging[1] else 0
         except ValueError:
-            raise HTTPError('Invalid paging controls "{}". The correct syntax is "search/<collection>[/<num-results>[/<offset>]]"'.format(paging))
+            raise HTTPError(400, 'Invalid paging controls "{}". The correct syntax is "search/<collection>[/<num-results>[/<offset>]]"'.format(paging))
 
         if audio_content:
             query = text_search_params(audio_content, query)
@@ -86,7 +86,7 @@ def search(collection, text_query, num_results, offset):
         allowed_namespaces = text_query['namespaces'].split(',')
         unknown_namespaces = list(filter(lambda p: p not in namespaces[collection], allowed_namespaces))
         if unknown_namespaces:
-            raise HTTPError('Unknown namespace{} "{}". Allowed namespaces are : "{}"'.format(
+            raise HTTPError(400, 'Unknown namespace{} "{}". Allowed namespaces are : "{}"'.format(
             's' if len(unknown_namespaces) > 1 else '', '", "'.join(unknown_namespaces), '", "'.join(namespaces[collection])))
         agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_namespaces)}}})
     if 'duration' in text_query:
@@ -160,7 +160,7 @@ def _parse_single_number_query(descriptor, param, mongo_field):
                     {'$addFields': {'distance': {'$abs': {'$subtract': [target_value, '${}'.format(mongo_field)]}}}},
                     {'$sort': {'distance': pymongo.ASCENDING}}]
     except (ValueError, IndexError):
-        raise HTTPError('The {} search parameters need to be of the form "[<|>|<=|>=]<value>", "<min>-<max>" or "<value>+-<tolerance>%"'.format(descriptor))
+        raise HTTPError(400, 'The {} search parameters need to be of the form "[<|>|<=|>=]<value>", "<min>-<max>" or "<value>+-<tolerance>%"'.format(descriptor))
 
 
 def _parse_key_query(param):
@@ -169,7 +169,7 @@ def _parse_key_query(param):
         tonic = split_key.group(1)
         scale = split_key.group(2)
     except AttributeError:
-        raise HTTPError('The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]')
+        raise HTTPError(400, 'The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]')
     match_list = [dict() for k in _key_variants]
     filter_list = []
     if tonic:
@@ -195,7 +195,7 @@ def _parse_chord_query(param):
     params = param.split(',')
     chords = params[0].split('-')
     if not all([_chord_regex.match(c) for c in chords]):
-        raise HTTPError('The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens')
+        raise HTTPError(400, 'The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens')
     if len(params) == 1:
         coverage = 1.
     else:
@@ -204,7 +204,7 @@ def _parse_chord_query(param):
             if len(params) > 2 or not params[1].endswith('%') or coverage > 1 or coverage < 0:
                 raise ValueError
         except ValueError:
-            raise HTTPError('The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign and separated from the chords by a single comma')
+            raise HTTPError(400, 'The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign and separated from the chords by a single comma')
     return [
         {
             '$addFields':
