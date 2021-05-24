@@ -83,9 +83,12 @@ class ChordEstimator:
         silence_mask = frame_spls < silence_threshold
         silence_mask = medfilt(silence_mask, 3).astype(bool)
         chromagram = chromagram[~silence_mask, :]
-        hmm_smoothed_state_indices, _, confidence = self.hmm.decode_with_PPD(chromagram.T)
-        squashed_start_times, squashed_end_times, squashed_chord_labels = squash_timed_labels(start_times, end_times, self.chords[hmm_smoothed_state_indices], silence_mask, 'N')
-        return squashed_start_times, squashed_end_times, squashed_chord_labels, confidence, duration
+        if chromagram.size:
+            hmm_smoothed_state_indices, _, confidence = self.hmm.decode_with_PPD(chromagram.T)
+            squashed_start_times, squashed_end_times, squashed_chord_labels = squash_timed_labels(start_times, end_times, self.chords[hmm_smoothed_state_indices], silence_mask, 'N')
+            return squashed_start_times, squashed_end_times, squashed_chord_labels, confidence, duration
+        else:
+            return [np.mean((start_times[0], end_times[0]))], [np.mean((start_times[-1], end_times[-1]))], ['N'], 1., duration
 
 
 cp = MadMomDeepChromaExtractor(samplerate, block_size, step_size)
