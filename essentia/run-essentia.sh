@@ -1,7 +1,8 @@
-#!/bin/sh
+#!/bin/bash
+
 
 # Get audio file path
-audio_path=${Http_Path:1}
+audio_path="$1"
 if [ -z "${audio_path}" ]; then
     audio_path="audio"
 fi

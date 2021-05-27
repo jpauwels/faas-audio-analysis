@@ -1,29 +1,22 @@
+FROM ghcr.io/openfaas/classic-watchdog:0.1.5 as watchdog
+
 FROM jpauwels/vamp-plugins:v18.06
 
-# 1. Use any image as your base image, or "scratch"
-# 2. Add fwatchdog binary via https://github.com/openfaas/faas/releases/
-# 3. Then set fprocess to the process you want to invoke per request - i.e. "cat" or "my_binary"
-
-# Add watchdog
-RUN apt-get update -y \
-&&  apt-get install -y curl \
-&& curl -sSL https://github.com/openfaas/faas/releases/download/0.9.6/fwatchdog > /usr/bin/fwatchdog \
-&& chmod +x /usr/bin/fwatchdog \
-&& apt-get autoremove --purge -y curl \
-&&  apt-get clean \
-&&  rm -rf /var/lib/apt/lists/*
+COPY --from=watchdog /fwatchdog /usr/bin/fwatchdog
+RUN chmod +x /usr/bin/fwatchdog
 
 # Add non root user
-RUN addgroup --system app && adduser --system --ingroup app app
-RUN chown app /home/app
+RUN addgroup --system app && adduser app --system --ingroup app
 WORKDIR /home/app
 USER app
 
+COPY openfaas_entrypoint.sh openfaas_entrypoint.sh
+COPY run-sonic-annotator.sh run-sonic-annotator.sh
 COPY transforms transforms
-COPY entrypoint.sh entrypoint.sh
 WORKDIR /tmp
 
 # Populate example here - i.e. "cat", "sha512sum" or "node index.js"
-ENV fprocess="/home/app/entrypoint.sh"
-HEALTHCHECK --interval=5s CMD [ -e /tmp/.lock ] || exit 1
+ENV fprocess="/home/app/openfaas_entrypoint.sh"
+EXPOSE 8080
+HEALTHCHECK --interval=3s CMD [ -e /tmp/.lock ] || exit 1
 CMD [ "fwatchdog" ]
