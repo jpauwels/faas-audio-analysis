@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+from accept_types import get_best_match
 import pymongo
 import requests
 from requests.exceptions import HTTPError
@@ -53,15 +54,16 @@ def handle(audio_content):
                 raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
                 's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(all_descriptors)))
 
-        mime_type = os.getenv('Http_Accept', 'application/json')
-        if mime_type == '*/*':
-            mime_type = 'application/json'
-        unsupported_output = list(filter(lambda d: mime_type not in supported_output[d], descriptors))
-        if unsupported_output:
-            raise HTTPError(406, 'Unsupported MIME type "{}" for descriptor{} "{}"'.format(
-            mime_type, 
-            's' if len(unsupported_output) > 1 else '',
-            '"'+'", "'.join(unsupported_output)+'"'
+        accept_header = os.getenv('Http_Accept', '*/*')
+        acceptables = set.intersection(*[set(supported_output[k]) for k in descriptors])
+        mime_type = get_best_match(accept_header, acceptables)
+        if not mime_type:
+            raise HTTPError(406, 'No MIME type in "{}" acceptable for descriptor{} "{}". The accepted type{} "{}".'.format(
+                accept_header, 
+                's' if len(descriptors) > 1 else '',
+                '", "'.join(descriptors),
+                's are' if len(acceptables) > 1 else ' is',
+                '", "'.join(sorted(acceptables))
             ))
 
         essentia_descriptors = []

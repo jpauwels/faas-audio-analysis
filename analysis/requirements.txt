@@ -1,5 +1,6 @@
 pymongo
 requests
+accept-types
 minio
 rdflib
 rdflib-jsonld
