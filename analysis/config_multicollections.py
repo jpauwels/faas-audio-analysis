@@ -23,7 +23,7 @@ def alias_id(collection, named_id, db):
         namespace, file_id = named_id.split(':')
         if namespace == 'wasabi':
             file_id = db.wasabi_song.find_one({'_id': ObjectId(file_id)}, {'_id': False, 'id_song_deezer': True})['id_song_deezer']
-        return int(file_id)
+        return file_id
     else:
         return named_id
 
