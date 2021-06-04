@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import itertools
 from accept_types import get_best_match
 import pymongo
 import requests
@@ -11,7 +12,6 @@ from . import config
 from . import ld_converter
 
 
-all_descriptors = ['chords', 'instruments', 'keys', 'tempo', 'global-key', 'tuning', 'beats']
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
 supported_output = {'chords': ['application/json', 'application/ld+json'],
                     'instruments': ['application/json'],
@@ -20,6 +20,7 @@ supported_output = {'chords': ['application/json', 'application/ld+json'],
                     'global-key': ['application/json'],
                     'tuning': ['application/json'],
                     'beats': ['application/json'],
+                    'mood': ['application/json'],
                     }
 _client = None
 _instrument_names = ['Shaker', 'Electronic Beats', 'Drum Kit', 'Synthesizer', 'Female Voice', 'Male Voice', 'Violin', 'Flute', 'Harpsichord', 'Electric Guitar', 'Clarinet', 'Choir', 'Organ', 'Acoustic Guitar', 'Viola', 'French Horn', 'Piano', 'Cello', 'Harp', 'Conga', 'Synthetic Bass', 'Electric Piano', 'Acoustic Bass', 'Electric Bass']
@@ -40,19 +41,19 @@ def handle(audio_content):
             if 'namespaces' in descriptors:
                 return json.dumps(config.namespaces[collection])
             elif 'descriptors' in descriptors:
-                return json.dumps(all_descriptors)
+                return json.dumps(list(supported_output.keys()))
             elif 'id' in query:
                 named_id = query['id']
             else:
                 raise HTTPError(204, 'Nothing to do')
 
         if 'all' in descriptors:
-            descriptors = all_descriptors
+            descriptors = supported_output.keys()
         else:
-            unknown_descriptors = list(filter(lambda d: d not in all_descriptors, descriptors))
+            unknown_descriptors = list(filter(lambda d: d not in supported_output.keys(), descriptors))
             if unknown_descriptors:
                 raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
-                's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(all_descriptors)))
+                's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(supported_output.keys())))
 
         accept_header = os.getenv('Http_Accept', '*/*')
         acceptables = set.intersection(*[set(supported_output[k]) for k in descriptors])
@@ -155,6 +156,9 @@ def calculate_descriptor(file_name, audio_content, descriptor):
         result = requests.get(f"{os.getenv('CHORD_API')}/{file_name}", data=audio_content)
     elif descriptor == 'essentia-music':
         result = requests.get(f"{os.getenv('ESSENTIA_API')}/{file_name}", data=audio_content)
+    elif descriptor == 'mood':
+        model_names = [f'mood_{emotion}-{architecture}-{dataset}-2' for emotion, architecture, dataset in itertools.product(['aggressive', 'happy', 'relaxed', 'sad'], ['musicnn', 'vgg'], ['msd', 'mtt'])]
+        result = requests.post(f"{os.getenv('ESSENTIA_TF_MODELS_API')}/{'/'.join(model_names)}", data=audio_content)
     elif descriptor == 'instruments':
         sa_arg = {'-t': '/home/app/transforms/instrument-probabilities.n3', '-w': 'jams', '--jams-stdout': ''}
         result = requests.get(f"{os.getenv('INSTRUMENTS_API')}/{file_name}", data=audio_content, params=sa_arg)

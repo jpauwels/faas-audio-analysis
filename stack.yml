@@ -13,6 +13,7 @@ functions:
     environment:
       CHORD_API: 'http://gateway:8080/function/confident-chord-estimator'
       ESSENTIA_API: 'http://gateway:8080/function/essentia'
+      ESSENTIA_TF_MODELS_API: 'http://gateway:8080/function/essentia-tensorflow'
       INSTRUMENTS_API: 'http://gateway:8080/function/instrument-identifier'
       SONIC_ANNOTATOR_API: 'http://gateway:8080/function/sonic-annotator'
       read_timeout: 330s
@@ -57,6 +58,18 @@ functions:
     environment:
       read_timeout: 300s
       write_timeout: 300s
+      combine_output: false
+      write_debug: false
+  essentia-tensorflow:
+    lang: python3-debian-binary
+    handler: ./essentia-tensorflow
+    image: jpauwels/faas-essentia-tensorflow:latest
+    build_args:
+      TEST_ENABLED: false
+    readonly_root_filesystem: true
+    environment:
+      read_timeout: 5m
+      write_timeout: 5m
       combine_output: false
       write_debug: false
   search:
