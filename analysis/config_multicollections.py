@@ -37,7 +37,7 @@ def audio_uri(collection, named_id):
             object_prefix = provider_id
         try:
             object_name = next(_cache_storage.list_objects(provider, prefix=object_prefix)).object_name
-        except (StopIteration, minio.error.NoSuchBucket):
+        except (StopIteration, minio.error.S3Error):
             url = audiocommons_uri(provider, provider_id)
             r = requests.get(url)
             r.raise_for_status()
@@ -63,5 +63,5 @@ def audio_uri(collection, named_id):
         try:
             object_name = next(_readonly_storage.list_objects(collection, prefix=named_id)).object_name
             return _readonly_storage.presigned_get_object(collection, object_name, expires=timedelta(minutes=3))
-        except (StopIteration, minio.error.NoSuchBucket):
+        except (StopIteration, minio.error.S3Error):
             raise FileNotFoundError('No audio available for id "{}"'.format(named_id))
