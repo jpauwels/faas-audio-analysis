@@ -1,7 +1,9 @@
 from glob import glob
 import os
 import tempfile
-import essentia.standard as es
+import essentia.streaming as ess
+from essentia import Pool, run
+from essentia.standard import PoolAggregator
 from essentia import log
 
 
@@ -13,9 +15,9 @@ predictors = {}
 for model_path in sorted(glob('function/classifiers/*/*.pb')):
     model_name = os.path.splitext(os.path.basename(model_path))[0]
     if '-vggish-' in model_name:
-        predictors[model_name] = es.TensorflowPredictVGGish(graphFilename=model_path, accumulate=True)
+        predictors[model_name] = ess.TensorflowPredictVGGish(graphFilename=model_path, accumulate=False)
     else:
-        predictors[model_name] = es.TensorflowPredictMusiCNN(graphFilename=model_path, accumulate=True)
+        predictors[model_name] = ess.TensorflowPredictMusiCNN(graphFilename=model_path, accumulate=False)
 
 
 def handle(audio_content):
@@ -29,11 +31,15 @@ def handle(audio_content):
 
     with tempfile.NamedTemporaryFile('wb') as audio_file:
         audio_file.write(audio_content)
-        samples = es.MonoLoader(filename=audio_file.name, sampleRate=16000)()
-    response = {}
+        loader = ess.MonoLoader(filename=audio_file.name, sampleRate=16000)
+    pool = Pool()
     for model_name in model_names:
         try:
-            response[model_name] = predictors[model_name](samples).mean(axis=0).tolist()
+            loader.audio >> predictors[model_name].signal
+            predictors[model_name].predictions >> (pool, model_name)
         except KeyError:
             return {'error': f'Unknown model name "{model_name}"'}
+    run(loader)
+    stats = PoolAggregator(defaultStats=['mean'])(pool)
+    response = {model_name: stats[f'{model_name}.mean'].tolist() for model_name in model_names}
     return response
