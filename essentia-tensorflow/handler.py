@@ -1,9 +1,11 @@
 from glob import glob
 import os
 import tempfile
+from math import ceil
+import numpy as np
 import essentia.streaming as ess
-from essentia import Pool, run
-from essentia.standard import PoolAggregator
+from essentia import Pool, run, reset
+from essentia.standard import PoolAggregator, MonoLoader, FrameGenerator
 from essentia import log
 
 
@@ -29,7 +31,7 @@ def handle(audio_content):
     sample_rate = 16000
     with tempfile.NamedTemporaryFile('wb') as audio_file:
         audio_file.write(audio_content)
-        loader = ess.MonoLoader(filename=audio_file.name, sampleRate=sample_rate)
+        samples = MonoLoader(filename=audio_file.name, sampleRate=sample_rate)()
 
     input_map = {'musicnn': [], 'vggish': []}
     for model_name in model_names:
@@ -52,11 +54,15 @@ def handle(audio_content):
     pool = Pool()
     for input_type, type_models in input_map.items():
         if type_models:
+            segment_size = patch_size[input_type] * (frame_hop[input_type] - 1) + frame_size[input_type]
+            segment_hop = patch_hop[input_type] * frame_hop[input_type]
+            segment = np.empty(segment_size, dtype=np.single)
+            input_vector = ess.VectorInput(segment)
             fc = ess.FrameCutter(frameSize=frame_size[input_type], hopSize=frame_hop[input_type], startFromZero=True, validFrameThresholdRatio=1)
             vtt = ess.VectorRealToTensor(shape=[1, 1, patch_size[input_type], num_bands[input_type]], patchHopSize=patch_hop[input_type], lastPatchMode='discard')
             ttp = ess.TensorToPool(namespace='model/Placeholder')
         
-            loader.audio >> fc.signal
+            input_vector.data >> fc.signal
             fc.frame >> input_format[input_type].frame
             input_format[input_type].bands >> vtt.frame
             vtt.tensor >> ttp.tensor
@@ -72,7 +78,10 @@ def handle(audio_content):
                 ptt[model_name].tensor >> ttv[model_name].tensor
                 ttv[model_name].frame >> (pool, model_name)
 
-            run(loader)
+            for s in FrameGenerator(np.hstack((np.zeros(ceil(frame_size[input_type]/2)), samples)), frameSize=segment_size, hopSize=segment_hop, startFromZero=True, validFrameThresholdRatio=1, lastFrameToEndOfFile=True):
+                segment[:] = s
+                reset(input_vector)
+                run(input_vector)
 
             for model_name in type_models:
                 ttp.pool.disconnect(predictors[model_name].poolIn)
