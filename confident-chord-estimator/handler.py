@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
-import sys
 import numpy as np
-import json
 import madmom
 from scipy.linalg import circulant
 from scipy.signal import medfilt
 import itertools
-import os
-import os.path
-import requests
 from collections import defaultdict
 from hiddini import HMMTemplateCosSim
 import io
@@ -95,12 +90,8 @@ cp = MadMomDeepChromaExtractor(samplerate, block_size, step_size)
 hmm = ChordEstimator(chromas, chord_types, type_templates, cp, chord_self_prob, silence_threshold)
 
 
-def handle(audio_content):
-    """handle a request to the function
-    Args:
-        audio_content (bytes): audio bytestream
-    """
-    start_times, end_times, chord_labels, confidence, duration = hmm(io.BytesIO(audio_content))
+def handle(event, context):
+    start_times, end_times, chord_labels, confidence, duration = hmm(io.BytesIO(event.body))
     response = {'confidence': confidence, 'duration': duration, 'chordSequence': [], 'chordRatio': defaultdict(int)}
     for start, end, label in zip(start_times, end_times, chord_labels):
         response['chordSequence'].append({'start': start, 'end': end, 'label': label})
@@ -109,4 +100,7 @@ def handle(audio_content):
     chord_duration = sum(response['chordRatio'].values())
     response['chordRatio'].update({k: v/chord_duration for k, v in response['chordRatio'].items()})
     response['distinctChords'] = len(response['chordRatio'])
-    return json.dumps(response)
+    return {
+        "statusCode": 200,
+        "body": response,
+    }

@@ -71,7 +71,8 @@
 #  \____\___/|____/|_____|
 
 from rdflib import Graph, BNode, Namespace, RDF, XSD, URIRef, RDFS, Literal
-from collections import OrderedDict, Mapping
+from collections import OrderedDict
+from collections.abc import Mapping
 from copy import deepcopy
 import logging
 import json

@@ -19,18 +19,27 @@ for model_path in sorted(glob('function/classifiers/*/*.pb')):
     predictors[model_name] = ess.TensorflowPredict(graphFilename=model_path, inputs=['model/Placeholder'], outputs=['model/Sigmoid'])
 
 
-def handle(audio_content):
-    if os.getenv('Http_Method') == 'GET':
-        return list(predictors.keys())
-    elif os.getenv('Http_Method') != 'POST' or not audio_content:
-        return {'error': 'Expecting audio file to be POSTed'}
-    model_names = os.getenv('Http_Path', '').strip('/').split('/')
+def handle(event, context):
+    if event.method == 'GET':
+        return {
+            "statusCode": 200,
+            "body": list(predictors.keys()),
+        }
+    elif event.method != 'POST' or not event.body:
+        return {
+            "statusCode": 400,
+            "body": {'error': 'Expecting audio file to be POSTed'},
+        }
+    model_names = event.path.strip('/').split('/')
     if not model_names[0]:
-        return {'error': 'Please pass one or more model names out of "{}" in the path'.format('", "'.join(predictors.keys()))}
+        return {
+            "statusCode": 400,
+            "body": {'error': 'Please pass one or more model names out of "{}" in the path'.format('", "'.join(predictors.keys()))},
+        }
 
     sample_rate = 16000
     with tempfile.NamedTemporaryFile('wb') as audio_file:
-        audio_file.write(audio_content)
+        audio_file.write(event.body)
         samples = MonoLoader(filename=audio_file.name, sampleRate=sample_rate)()
 
     input_map = {'musicnn': [], 'vggish': []}
@@ -38,7 +47,10 @@ def handle(audio_content):
         try:
             predictors[model_name]
         except KeyError:
-            return {'error': f'Unknown model name "{model_name}"'}
+            return {
+                "statusCode": 400,
+                "body": {'error': f'Unknown model name "{model_name}"'},
+            }
         if '-vggish-' in model_name:
             input_map['vggish'].append(model_name)
         else:
@@ -89,4 +101,7 @@ def handle(audio_content):
 
     stats = PoolAggregator(defaultStats=['mean'])(pool)
     response = {model_name: stats[f'{model_name}.mean'].tolist() for model_name in model_names}
-    return response
+    return {
+        "statusCode": 200,
+        "body": response,
+    }

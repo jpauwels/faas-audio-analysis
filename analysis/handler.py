@@ -1,13 +1,12 @@
 import os
 import sys
-import json
 import itertools
 from accept_types import get_best_match
 import pymongo
 import requests
 from requests.exceptions import HTTPError
 import os.path
-from urllib.parse import parse_qsl, urlsplit, unquote
+from urllib.parse import urlsplit
 from . import config
 from . import ld_converter
 
@@ -26,24 +25,29 @@ _client = None
 _instrument_names = ['Shaker', 'Electronic Beats', 'Drum Kit', 'Synthesizer', 'Female Voice', 'Male Voice', 'Violin', 'Flute', 'Harpsichord', 'Electric Guitar', 'Clarinet', 'Choir', 'Organ', 'Acoustic Guitar', 'Viola', 'French Horn', 'Piano', 'Cello', 'Harp', 'Conga', 'Synthetic Bass', 'Electric Piano', 'Acoustic Bass', 'Electric Bass']
 
 
-def handle(audio_content):
+def handle(event, context):
     """handle a request to the function
     """
     try:
-        query = dict(parse_qsl(unquote(os.getenv('Http_Query', ''))))
-        if audio_content:
-            descriptors = os.getenv('Http_Path', '').lstrip('/').split('/')
-            named_id = query.get('id', 'undefined')
+        if event.body:
+            descriptors = event.path.strip('/').split('/')
+            named_id = event.query.get('id', 'undefined')
         else:
-            collection, *descriptors = os.getenv('Http_Path', '').lstrip('/').split('/')
+            collection, *descriptors = event.path.strip('/').split('/')
             if collection not in config.all_collections:
                 raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
             if 'namespaces' in descriptors:
-                return json.dumps(config.namespaces[collection])
+                return {
+                    "statusCode": 200,
+                    "body": config.namespaces[collection],
+                }
             elif 'descriptors' in descriptors:
-                return json.dumps(list(supported_output.keys()))
-            elif 'id' in query:
-                named_id = query['id']
+                return {
+                    "statusCode": 200,
+                    "body": list(supported_output.keys()),
+                }
+            elif 'id' in event.query:
+                named_id = event.query['id']
             else:
                 raise HTTPError(204, 'Nothing to do')
 
@@ -55,7 +59,7 @@ def handle(audio_content):
                 raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
                 's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(supported_output.keys())))
 
-        accept_header = os.getenv('Http_Accept', '*/*')
+        accept_header = event.headers.get('accept', '*/*')
         acceptables = set.intersection(*[set(supported_output[k]) for k in descriptors])
         mime_type = get_best_match(accept_header, acceptables)
         if not mime_type:
@@ -80,8 +84,8 @@ def handle(audio_content):
         response = {'id': named_id}
 
         for descriptor in req_descriptors:
-            if audio_content:
-                result = calculate_descriptor(named_id, audio_content, descriptor)
+            if event.body:
+                result = calculate_descriptor(named_id, event.body, descriptor)
             else:
                 result = get_descriptor(collection, named_id, descriptor)
             if descriptor == 'essentia-music':
@@ -90,11 +94,21 @@ def handle(audio_content):
                 response[descriptor] = rewrite_descriptor_output(descriptor, result)
         
         if mime_type == 'application/json':
-            return json.dumps(response)
+            return {
+                "statusCode": 200,
+                "body": response,
+            }
         elif mime_type == 'application/ld+json':
-            return json.dumps(ld_converter.convert(descriptors, response, 'json-ld'))
+            return {
+                "statusCode": 200,
+                "body": ld_converter.convert(descriptors, response, 'json-ld'),
+            }
+
     except HTTPError as e:
-        return json.dumps(str(e))
+        return {
+            "statusCode": e.errno,
+            "body": str(e),
+        }
 
 
 def essentia_descriptor_output(essentia_descriptors, result):

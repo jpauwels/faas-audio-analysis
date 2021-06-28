@@ -1,12 +1,10 @@
 import os
 import sys
-import json
 import re
 import requests
 from requests.exceptions import HTTPError
 import pymongo
 from bson.son import SON
-from urllib.parse import parse_qsl, unquote
 
 
 descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration']
@@ -20,19 +18,14 @@ _chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
 _client = None
 
 
-def handle(audio_content):
-    """handle a request to the function
-    Args:
-        req (str): request body
-    """
+def handle(event, context):
     try:
-        query = dict(parse_qsl(unquote(os.getenv('Http_Query', '')), keep_blank_values=True))
-        unknown_descriptors = list(filter(lambda d: d not in descriptors+['namespaces'], query.keys()))
+        unknown_descriptors = list(filter(lambda d: d not in descriptors+['namespaces'], event.query.keys()))
         if unknown_descriptors:
             raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
             's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(descriptors)))
 
-        collection, *paging = os.getenv('Http_Path', '').lstrip('/').split('/')
+        collection, *paging = event.path.lstrip('/').split('/')
         if collection not in all_collections:
             raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
         try:
@@ -41,11 +34,20 @@ def handle(audio_content):
         except ValueError:
             raise HTTPError(400, 'Invalid paging controls "{}". The correct syntax is "search/<collection>[/<num-results>[/<offset>]]"'.format(paging))
 
-        if audio_content:
-            query = text_search_params(audio_content, query)
-        return json.dumps(search(collection, query, num_results, offset))
+        if event.body:
+            query = text_search_params(event.body, event.query)
+        else:
+            query = event.query
+
+        return {
+            "statusCode": 200,
+            "body": search(collection, query, num_results, offset),
+        }
     except HTTPError as e:
-        return json.dumps(str(e))
+        return {
+            "statusCode": e.errno,
+            "body": str(e),
+        }
 
 
 def text_search_params(audio_content, audio_query):

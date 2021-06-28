@@ -1,0 +1,5 @@
+numpy>=1.8.1
+scipy>=0.16
+git+https://github.com/jpauwels/Hiddini.git@7160b0acae9828a17dff4a5b81180e1ec2cb7e5c
+# git+https://github.com/CPJKU/madmom.git@805c08e69b4390ce763c098474b2f96fab47bf60
+git+https://github.com/jpauwels/madmom.git@e93bb30daad51ddc36b3a7867fbb527e2549b0ee
