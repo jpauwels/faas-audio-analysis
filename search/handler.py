@@ -207,17 +207,19 @@ def _parse_chord_query(param):
             raise HTTPError(400, 'The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign and separated from the chords by a single comma')
     return [
         {
-            '$addFields':
-            {
-                'coverage': {'$sum': ['$chords.chordRatio.{}'.format(c) for c in chords]},
-                'coveredChords': {'$sum': [{'$cond': [{'$gt': ['$chords.chordRatio.{}'.format(c), 0]}, 1, 0]} for c in chords]}
-            }
+            '$match': {'$or': [ {f'chords.chordRatio.{c}': {'$gt': 0}} for c in chords ]},
         },
         {
-            '$match': {'coverage': {'$gte': coverage}}
+            '$addFields': {'coverage': {'$sum': [ f'$chords.chordRatio.{c}' for c in chords ]}},
         },
         {
-            '$sort': SON([('coveredChords', pymongo.DESCENDING), ('chords.confidence', pymongo.DESCENDING)])
+            '$match': {'coverage': {'$gte': coverage}},
+        },
+        {
+            '$addFields': {'coveredChords': {'$sum': [ {'$cond': [{ '$gt': [ f'$chords.chordRatio.{c}', 0 ] }, 1, 0]} for c in chords ]}},
+        },
+        {
+            '$sort': SON([('coveredChords', pymongo.DESCENDING), ('chords.confidence', pymongo.DESCENDING)]),
         },
     ]
 
