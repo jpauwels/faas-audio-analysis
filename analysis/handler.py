@@ -157,7 +157,7 @@ def calculate_descriptor(file_name, audio_content, descriptor):
     elif descriptor == 'essentia-music':
         result = requests.get(f"{os.getenv('ESSENTIA_API')}/{file_name}", data=audio_content)
     elif descriptor == 'mood':
-        model_names = [f'mood_{emotion}-{architecture}-{dataset}-2' for emotion, architecture, dataset in itertools.product(['aggressive', 'happy', 'relaxed', 'sad'], ['musicnn', 'vgg'], ['msd', 'mtt'])]
+        model_names = [f'mood_{emotion}-{architecture}-{dataset}-2' for emotion, architecture, dataset in itertools.product(['aggressive', 'happy', 'relaxed', 'sad'], ['musicnn'], ['mtt'])] #, 'vgg'], ['msd', 'mtt'])]
         result = requests.post(f"{os.getenv('ESSENTIA_TF_MODELS_API')}/{'/'.join(model_names)}", data=audio_content)
     elif descriptor == 'instruments':
         sa_arg = {'-t': '/home/app/transforms/instrument-probabilities.n3', '-w': 'jams', '--jams-stdout': ''}
