@@ -92,36 +92,20 @@ def search(collection, text_query, num_results, offset):
             's' if len(unknown_namespaces) > 1 else '', '", "'.join(unknown_namespaces), '", "'.join(namespaces[collection])))
         agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_namespaces)}}})
     if 'duration' in text_query:
-        param = text_query['duration']
-        if param:
-            agg_pipeline.extend(_parse_single_number_query('duration', param, 'essentia-music.metadata.audio_properties.length'))
+        agg_pipeline.extend(_parse_single_number_query('duration', text_query['duration'], 'essentia-music.metadata.audio_properties.length'))
         projection['duration'] = '$essentia-music.metadata.audio_properties.length'
     if 'tempo' in text_query:
-        param = text_query['tempo']
-        if param:
-            agg_pipeline.extend(_parse_single_number_query('tempo', param, 'essentia-music.rhythm.bpm'))
+        agg_pipeline.extend(_parse_single_number_query('tempo', text_query['tempo'], 'essentia-music.rhythm.bpm'))
         projection['tempo'] = '$essentia-music.rhythm.bpm'
     if 'tuning' in text_query:
-        param = text_query['tuning']
-        if param:
-            agg_pipeline.extend(_parse_single_number_query('tuning', param, 'essentia-music.tonal.tuning_frequency'))
+        agg_pipeline.extend(_parse_single_number_query('tuning', text_query['tuning'], 'essentia-music.tonal.tuning_frequency'))
         projection['tuning'] = '$essentia-music.tonal.tuning_frequency'
     if 'global-key' in text_query:
-        param = text_query['global-key']
-        if param:
-            agg_pipeline.extend(_parse_key_query(param))
-        else:
-            agg_pipeline.append({'$addFields': {'key_best_matching':
-                {'$let': {'vars': {'allKeys': ['$essentia-music.tonal.key_{}'.format(k) for k in _key_variants]},
-                            'in': {'$arrayElemAt': ['$$allKeys', {'$indexOfArray': ['$$allKeys.strength', {'$max': ['$$allKeys.strength']}]}]}}}
-            }})
+        agg_pipeline.extend(_parse_key_query(text_query['global-key']))
         projection['global-key'] = {'key': {'$concat': ['$key_best_matching.key', ' ', '$key_best_matching.scale']}, 
                                     'confidence': '$key_best_matching.strength'}
     if 'chords' in text_query:
-        param = text_query['chords']
-        if param:
-            agg_pipeline.extend(_parse_chord_query(param))
-        agg_pipeline.append({'$project': {'chords.distinctChords': False, 'chords.chordRatio': False}})
+        agg_pipeline.extend(_parse_chord_query(text_query['chords']))
         projection['chords'] = True
     
     agg_pipeline.extend([{'$skip': offset}, {'$limit': num_results}])
@@ -132,98 +116,138 @@ def search(collection, text_query, num_results, offset):
 
 
 def _parse_single_number_query(descriptor, param, mongo_field):
-    try:
-        if param.startswith('<='):
-            return [{'$match': {mongo_field: {'$lte': float(param[2:])}}},
-                    {'$sort': {mongo_field: pymongo.DESCENDING}}]
-        elif param.startswith('>='):
-            return [{'$match': {mongo_field: {'$gte': float(param[2:])}}},
-                    {'$sort': {mongo_field: pymongo.ASCENDING}}]
-        elif param.startswith('<'):
-            return [{'$match': {mongo_field: {'$lt': float(param[1:])}}},
-                    {'$sort': {mongo_field: pymongo.DESCENDING}}]
-        elif param.startswith('>'):
-            return [{'$match': {mongo_field: {'$gt': float(param[1:])}}},
-                    {'$sort': {mongo_field: pymongo.ASCENDING}}]
-        else:
-            if param.endswith('%'):
-                # tolerance
-                params = param.split(' -')
-                params[1] = params[1][:-1]
-                target_value, tolerance = map(float, params)
-                lower = target_value * (100 - tolerance) / 100
-                upper = target_value * (100 + tolerance) / 100
-            else:
-                # range
-                params = param.split('-')
-                lower, upper = map(float, params)
-                target_value = (lower + upper) / 2
-            return [{'$match': {mongo_field: {'$gte': lower, '$lt': upper}}},
-                    {'$addFields': {'distance': {'$abs': {'$subtract': [target_value, '${}'.format(mongo_field)]}}}},
-                    {'$sort': {'distance': pymongo.ASCENDING}}]
-    except (ValueError, IndexError):
-        raise HTTPError(400, 'The {} search parameters need to be of the form "[<|>|<=|>=]<value>", "<min>-<max>" or "<value>+-<tolerance>%"'.format(descriptor))
-
-
-def _parse_key_query(param):
-    split_key = _key_regex.match(param)
-    try:
-        tonic = split_key.group(1)
-        scale = split_key.group(2)
-    except AttributeError:
-        raise HTTPError(400, 'The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]')
-    match_list = [dict() for k in _key_variants]
-    filter_list = []
-    if tonic:
-        for m, k in zip(match_list, _key_variants):
-            m['essentia-music.tonal.key_{}.key'.format(k)] = tonic
-        filter_list.append({'$eq': ['$$this.key', tonic]})
-    if scale:
-        for m, k in zip(match_list, _key_variants):
-            m['essentia-music.tonal.key_{}.scale'.format(k)] = scale
-        filter_list.append({'$eq': ['$$this.scale', scale]})
-    return [
-        {'$match': {'$or': match_list}},
-        {'$addFields': {'key_best_matching': 
-            {'$let': {'vars': {'matchingKeys': {'$filter': {'input': ['$essentia-music.tonal.key_{}'.format(k) for k in _key_variants], 
-                                                            'cond': {'$and': filter_list}}}},
-                    'in': {'$arrayElemAt': ['$$matchingKeys', {'$indexOfArray': ['$$matchingKeys.strength', {'$max': ['$$matchingKeys.strength']}]}]}}}
-        }},
-        {'$sort': {'key_best_matching.strength': pymongo.DESCENDING}}
-    ]
-
-
-def _parse_chord_query(param):
-    params = param.split(',')
-    chords = params[0].split('-')
-    if not all([_chord_regex.match(c) for c in chords]):
-        raise HTTPError(400, 'The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens')
-    if len(params) == 1:
-        coverage = 1.
-    else:
+    if param:
         try:
-            coverage = float(params[1][:-1]) / 100
-            if len(params) > 2 or not params[1].endswith('%') or coverage > 1 or coverage < 0:
-                raise ValueError
-        except ValueError:
-            raise HTTPError(400, 'The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign and separated from the chords by a single comma')
-    return [
-        {
-            '$match': {'$or': [ {f'chords.chordRatio.{c}': {'$gt': 0}} for c in chords ]},
-        },
-        {
-            '$addFields': {'coverage': {'$sum': [ f'$chords.chordRatio.{c}' for c in chords ]}},
-        },
-        {
-            '$match': {'coverage': {'$gte': coverage}},
-        },
-        {
-            '$addFields': {'coveredChords': {'$sum': [ {'$cond': [{ '$gt': [ f'$chords.chordRatio.{c}', 0 ] }, 1, 0]} for c in chords ]}},
-        },
-        {
-            '$sort': SON([('coveredChords', pymongo.DESCENDING), ('chords.confidence', pymongo.DESCENDING)]),
-        },
-    ]
+            if param.startswith('<='):
+                return [{'$match': {mongo_field: {'$lte': float(param[2:])}}},
+                        {'$sort': {mongo_field: pymongo.DESCENDING}}]
+            elif param.startswith('>='):
+                return [{'$match': {mongo_field: {'$gte': float(param[2:])}}},
+                        {'$sort': {mongo_field: pymongo.ASCENDING}}]
+            elif param.startswith('<'):
+                return [{'$match': {mongo_field: {'$lt': float(param[1:])}}},
+                        {'$sort': {mongo_field: pymongo.DESCENDING}}]
+            elif param.startswith('>'):
+                return [{'$match': {mongo_field: {'$gt': float(param[1:])}}},
+                        {'$sort': {mongo_field: pymongo.ASCENDING}}]
+            else:
+                if param.endswith('%'):
+                    # tolerance
+                    params = param.split(' -')
+                    params[1] = params[1][:-1]
+                    target_value, tolerance = map(float, params)
+                    lower = target_value * (100 - tolerance) / 100
+                    upper = target_value * (100 + tolerance) / 100
+                else:
+                    # range
+                    params = param.split('-')
+                    lower, upper = map(float, params)
+                    target_value = (lower + upper) / 2
+                return [{'$match': {mongo_field: {'$gte': lower, '$lt': upper}}},
+                        {'$addFields': {'distance': {'$abs': {'$subtract': [target_value, '${}'.format(mongo_field)]}}}},
+                        {'$sort': {'distance': pymongo.ASCENDING}}]
+        except (ValueError, IndexError):
+            raise HTTPError(400, 'The {} search parameters need to be of the form "[<|>|<=|>=]<value>", "<min>-<max>" or "<value>+-<tolerance>%"'.format(descriptor))
+    else:
+        return []
+
+
+def _parse_key_query(key_param):
+    if key_param:
+        split_key = _key_regex.match(key_param)
+        try:
+            tonic = split_key.group(1)
+            scale = split_key.group(2)
+        except AttributeError:
+            raise HTTPError(400, 'The global-key search parameters need to be of the form [A|A#|B|C|C#|D|D#|E|F|F#|G|G#][major|minor]')
+        match_list = [dict() for k in _key_variants]
+        filter_list = []
+        if tonic:
+            for m, k in zip(match_list, _key_variants):
+                m['essentia-music.tonal.key_{}.key'.format(k)] = tonic
+            filter_list.append({'$eq': ['$$this.key', tonic]})
+        if scale:
+            for m, k in zip(match_list, _key_variants):
+                m['essentia-music.tonal.key_{}.scale'.format(k)] = scale
+            filter_list.append({'$eq': ['$$this.scale', scale]})
+    if key_param:
+        return [
+            {'$match': {'$or': match_list}},
+            {
+                '$addFields': {
+                    'key_best_matching': {
+                        '$let': {
+                            'vars': {
+                                'matchingKeys': {
+                                    '$filter': {
+                                        'input': ['$essentia-music.tonal.key_{}'.format(k) for k in _key_variants],
+                                        'cond': {'$and': filter_list}
+                                        }
+                                    }
+                            },
+                            'in': {
+                                '$arrayElemAt': ['$$matchingKeys', {'$indexOfArray': ['$$matchingKeys.strength', {'$max': ['$$matchingKeys.strength']}]}]
+                            }
+                        }
+                    }
+                }
+            },
+            {'$sort': {'key_best_matching.strength': pymongo.DESCENDING}}
+        ]
+    else:
+        return [
+            {
+                '$addFields': {
+                    'key_best_matching': {
+                        '$let': {
+                            'vars': {
+                                'allKeys': ['$essentia-music.tonal.key_{}'.format(k) for k in _key_variants]
+                            },
+                            'in': {
+                                '$arrayElemAt': ['$$allKeys', {'$indexOfArray': ['$$allKeys.strength', {'$max': ['$$allKeys.strength']}]}]
+                            }
+                        }
+                    }
+                }
+            }
+        ]
+
+
+def _parse_chord_query(chord_param):
+    agg_stages = []
+    if chord_param:
+        params = chord_param.split(',')
+        chords = params[0].split('-')
+        if not all([_chord_regex.match(c) for c in chords]):
+            raise HTTPError(400, 'The syntax for the chords used as a search parameters is [A|Ab|B|Bb|C|D|Db|E|Eb|F|G|Gb][maj|min|7|maj7|min7], separated by hyphens')
+        if len(params) == 1:
+            coverage = 1.
+        else:
+            try:
+                coverage = float(params[1][:-1]) / 100
+                if len(params) > 2 or not params[1].endswith('%') or coverage > 1 or coverage < 0:
+                    raise ValueError
+            except ValueError:
+                raise HTTPError(400, 'The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign and separated from the chords by a single comma')
+        agg_stages.extend([
+            {
+                '$match': {'$or': [ {f'chords.chordRatio.{c}': {'$gt': 0}} for c in chords ]},
+            },
+            {
+                '$addFields': {'coverage': {'$sum': [ f'$chords.chordRatio.{c}' for c in chords ]}},
+            },
+            {
+                '$match': {'coverage': {'$gte': coverage}},
+            },
+            {
+                '$addFields': {'coveredChords': {'$sum': [ {'$cond': [{ '$gt': [ f'$chords.chordRatio.{c}', 0 ] }, 1, 0]} for c in chords ]}},
+            },
+            {
+                '$sort': SON([('coveredChords', pymongo.DESCENDING), ('chords.confidence', pymongo.DESCENDING)]),
+            },
+        ])
+    agg_stages.append({'$project': {'chords.distinctChords': False, 'chords.chordRatio': False}})
+    return agg_stages
 
 
 def _get_client():
