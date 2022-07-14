@@ -15,6 +15,7 @@ namespaces = {'audiocommons': ['jamendo-tracks', 'freesound-sounds', 'europeana-
 _key_regex = re.compile('^(A#|C#|D#|F#|G#|[A-G])?(major|minor)?$')
 _key_variants = ['edma', 'krumhansl', 'temperley']
 _chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
+_moods = ('agressive', 'happy', 'relaxed', 'sad')
 _client = None
 
 
@@ -107,6 +108,9 @@ def search(collection, text_query, num_results, offset):
     if 'chords' in text_query:
         agg_pipeline.extend(_parse_chord_query(text_query['chords']))
         projection['chords'] = True
+    if 'mood' in text_query:
+        agg_pipeline.extend(_parse_mood_query(text_query['mood']))
+        projection['mood'] = '$maxMood'
     
     agg_pipeline.extend([{'$skip': offset}, {'$limit': num_results}])
     agg_pipeline.append({'$project': projection})
@@ -247,6 +251,55 @@ def _parse_chord_query(chord_param):
             },
         ])
     agg_stages.append({'$project': {'chords.distinctChords': False, 'chords.chordRatio': False}})
+    return agg_stages
+
+
+def _parse_mood_query(mood_param):
+    if mood_param not in _moods:
+        raise HTTPError(400, f'The mood search parameter needs to be one of {_moods.joint(" ")}')
+    agg_stages = []
+    if mood_param:
+        agg_stages.append({'$match': {'mood': {'$exists': True}}})
+    agg_stages.append({
+        '$addFields': {
+            'maxMood': {
+                '$let': {
+                    'vars': {
+                        'moodValues': {
+                            '$map': {
+                                'input': {'$objectToArray': '$mood'},
+                                'in': {
+                                    '$let': {
+                                        'vars': {
+                                            'name': {'$arrayElemAt': [{'$split': [{'$trim': {'input': '$$this.k', 'chars': 'mood_'}}, '-']}, 0]}
+                                        },
+                                        'in': {
+                                            'k': '$$name', 'v': {'$arrayElemAt': ['$$this.v', {'$cond': {'if': {'$in': ['$$name', ['sad', 'relaxed']]}, 'then': 1, 'else': 0}}]}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    'in': {
+                        '$let': {
+                            'vars': {
+                                'maxMood': [{'$arrayElemAt': ['$$moodValues', {'$indexOfArray': ['$$moodValues.v', {'$max': ['$$moodValues.v']}]}]}]
+                            },
+                            'in': {
+                                '$arrayToObject': '$$maxMood'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    if mood_param:
+        agg_stages.extend([
+            {'$match': {f'maxMood.{mood_param}': {'$exists': True}}},
+            {'$sort': {f'maxMood.{mood_param}': pymongo.DESCENDING}},
+        ])
     return agg_stages
 
 

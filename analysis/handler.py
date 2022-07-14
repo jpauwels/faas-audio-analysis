@@ -134,6 +134,9 @@ def rewrite_descriptor_output(descriptor, result):
         response = result
     elif descriptor == 'keys':
         response = [{'time': k['time'], 'label': k['label']} for k in result['annotations'][0]['data']]
+    elif descriptor == 'mood':
+        renamed_result = {k.lstrip('mood_').split('-')[0]: v for k, v in result.items()}
+        response = {name: values[1] if name in ('sad', 'relaxed') else values[0] for name, values in renamed_result.items()}
     else:
         response = result
     return response
