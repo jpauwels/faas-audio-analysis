@@ -52,7 +52,7 @@ def handle(event, context):
                 raise HTTPError(204, 'Nothing to do')
 
         if 'all' in descriptors:
-            descriptors = supported_output.keys()
+            descriptors = list(supported_output.keys())
         else:
             unknown_descriptors = list(filter(lambda d: d not in supported_output.keys(), descriptors))
             if unknown_descriptors:
@@ -60,7 +60,7 @@ def handle(event, context):
                 's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(supported_output.keys())))
 
         accept_header = event.headers.get('accept', '*/*')
-        acceptables = set.intersection(*[set(supported_output[k]) for k in descriptors])
+        acceptables = [s for s in supported_output[descriptors[0]] if all([s in supported_output[k] for k in descriptors[1:]])]
         mime_type = get_best_match(accept_header, acceptables)
         if not mime_type:
             raise HTTPError(406, 'No MIME type in "{}" acceptable for descriptor{} "{}". The accepted type{} "{}".'.format(
