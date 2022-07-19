@@ -76,7 +76,7 @@ class ChordEstimator:
     def __call__(self, audio_file):
         chromagram, (start_times, end_times), duration, frame_spls = self.chroma_extractor(audio_file)
         silence_mask = frame_spls < silence_threshold
-        silence_mask = medfilt(silence_mask, 3).astype(bool)
+        silence_mask = medfilt(silence_mask.astype(int), 3).astype(bool)
         chromagram = chromagram[~silence_mask, :]
         if chromagram.size:
             hmm_smoothed_state_indices, _, confidence = self.hmm.decode_with_PPD(chromagram.T)
