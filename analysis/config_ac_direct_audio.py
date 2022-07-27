@@ -25,7 +25,7 @@ def validate_audiocommons_id(linked_id):
 
 def audiocommons_uri(provider, provider_id):
     if provider == 'jamendo-tracks':
-        return 'https://flac.jamendo.com/download/track/{}/flac'.format(provider_id)
+        return 'https://prod-1.storage.jamendo.com/download/track/{}/flac/'.format(provider_id)
     elif provider == 'freesound-sounds':
         r = requests.get('https://freesound.org/apiv2/sounds/{id}/'.format(id=provider_id), params={'token': os.getenv('FREESOUND_API_KEY'), 'fields': 'previews'})
         return r.json()['previews']['preview-hq-ogg']
