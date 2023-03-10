@@ -8,9 +8,10 @@ import cgi
 import mimetypes
 from datetime import timedelta
 from .config_ac_direct_audio import all_collections, namespaces, validate_audiocommons_id, audiocommons_uri
+from .secrets import get_secrets
 
-
-_cache_storage = minio.Minio(os.getenv('MINIO_CACHE_HOSTNAME'), access_key=os.getenv('MINIO_CACHE_ACCESS_KEY'), secret_key=os.getenv('MINIO_CACHE_SECRET_KEY'), secure=False)
+_secrets = get_secrets(['object-store-readwrite-access', 'object-store-readwrite-secret'])
+_cache_storage = minio.Minio(os.getenv('OBJECT_STORE_HOSTNAME', 'localhost'), access_key=_secrets['object-store-readwrite-access'], secret_key=_secrets['object-store-readwrite-secret'], secure=False)
 
 
 def audio_uri(collection, linked_id):

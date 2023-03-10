@@ -10,6 +10,7 @@ import os.path
 from urllib.parse import urlsplit
 from . import config
 from . import ld_converter
+from .secrets import get_secrets
 
 
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
@@ -24,6 +25,7 @@ supported_output = {'chords': ['application/json', 'application/ld+json'],
                     }
 _client = None
 _instrument_names = ['Shaker', 'Electronic Beats', 'Drum Kit', 'Synthesizer', 'Female Voice', 'Male Voice', 'Violin', 'Flute', 'Harpsichord', 'Electric Guitar', 'Clarinet', 'Choir', 'Organ', 'Acoustic Guitar', 'Viola', 'French Horn', 'Piano', 'Cello', 'Harp', 'Conga', 'Synthetic Bass', 'Electric Piano', 'Acoustic Bass', 'Electric Bass']
+_secrets = get_secrets(['database-connection'])
 
 
 def handle(event, context):
@@ -195,6 +197,6 @@ def _get_client():
     global _client
     if _client is None:
         sys.stderr.write('Connecting to DB\n')
-        _client = pymongo.MongoClient(os.getenv('MONGO_CONNECTION'))
+        _client = pymongo.MongoClient(_secrets['database-connection'])
     sys.stderr.write('Connected to DB: {}\n'.format(_client))
     return _client

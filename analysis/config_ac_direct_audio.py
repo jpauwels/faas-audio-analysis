@@ -1,8 +1,9 @@
 import requests
-import os
+from .secrets import get_secrets
 
 all_collections = ['audiocommons']
 namespaces = {'audiocommons': ['jamendo-tracks', 'freesound-sounds', 'europeana-res']}
+_secrets = get_secrets(['freesound-api-key', 'europeana-api-key'])
 
 
 def audio_uri(collection, linked_id):
@@ -27,10 +28,10 @@ def audiocommons_uri(provider, provider_id):
     if provider == 'jamendo-tracks':
         return 'https://prod-1.storage.jamendo.com/download/track/{}/flac/'.format(provider_id)
     elif provider == 'freesound-sounds':
-        r = requests.get('https://freesound.org/apiv2/sounds/{id}/'.format(id=provider_id), params={'token': os.getenv('FREESOUND_API_KEY'), 'fields': 'previews'})
+        r = requests.get('https://freesound.org/apiv2/sounds/{id}/'.format(id=provider_id), params={'token': _secrets['freesound-api-key'], 'fields': 'previews'})
         return r.json()['previews']['preview-hq-ogg']
     elif provider == 'europeana-res':
-        r = requests.get('http://www.europeana.eu/api/v2/record/{id}.json'.format(id=provider_id), params={'wskey': os.getenv('EUROPEANA_API_KEY')})
+        r = requests.get('http://www.europeana.eu/api/v2/record/{id}.json'.format(id=provider_id), params={'wskey': _secrets['europeana-api-key']})
         if r.status_code == requests.codes['ok'] and r.json()['success']:
             return r.json()['object']['aggregations'][0]['edmIsShownBy']
         else:

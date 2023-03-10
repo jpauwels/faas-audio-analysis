@@ -1,6 +1,6 @@
 build/
 template/
-env.yml
+set-secrets.sh
 analysis/config.py
 
 # Byte-compiled / optimized / DLL files

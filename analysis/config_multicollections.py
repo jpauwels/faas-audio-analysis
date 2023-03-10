@@ -9,13 +9,15 @@ import mimetypes
 from datetime import timedelta
 from bson.objectid import ObjectId
 from .config_ac_direct_audio import validate_audiocommons_id, audiocommons_uri
+from .secrets import get_secrets
 
 all_collections = ['audiocommons', 'deezer', 'ilikemusic']
 namespaces = {'audiocommons': ['jamendo-tracks', 'freesound-sounds', 'europeana-res'],
               'deezer': ['deezer', 'wasabi'],
               'ilikemusic': []}
-_cache_storage = minio.Minio(os.getenv('MINIO_CACHE_HOSTNAME'), access_key=os.getenv('MINIO_CACHE_ACCESS_KEY'), secret_key=os.getenv('MINIO_CACHE_SECRET_KEY'), secure=False)
-_readonly_storage = minio.Minio(os.getenv('MINIO_READONLY_HOSTNAME'), access_key=os.getenv('MINIO_READONLY_ACCESS_KEY'), secret_key=os.getenv('MINIO_READONLY_SECRET_KEY'), secure=False)
+_secrets = get_secrets(['object-store-readwrite-access', 'object-store-readwrite-secret', 'object-store-readonly-access', 'object-store-readonly-secret'])
+_readwrite_storage = minio.Minio(os.getenv('OBJECT_STORE_HOSTNAME', 'localhost'), access_key=_secrets['object-store-readwrite-access'], secret_key=_secrets['object-store-readwrite-secret'], secure=False)
+_readonly_storage = minio.Minio(os.getenv('OBJECT_STORE_HOSTNAME', 'localhost'), access_key=_secrets['object-store-readonly-access'], secret_key=_secrets['object-store-readonly-secret'], secure=False)
 
 
 def alias_id(collection, named_id, db):
@@ -36,7 +38,7 @@ def audio_uri(collection, named_id):
         else:
             object_prefix = provider_id
         try:
-            object_name = next(_cache_storage.list_objects(provider, prefix=object_prefix)).object_name
+            object_name = next(_readwrite_storage.list_objects(provider, prefix=object_prefix)).object_name
         except (StopIteration, minio.error.S3Error):
             url = audiocommons_uri(provider, provider_id)
             r = requests.get(url)
@@ -53,8 +55,8 @@ def audio_uri(collection, named_id):
                     except KeyError:
                         pass
             object_name = object_prefix+file_ext
-            _cache_storage.put_object(provider, object_name, io.BytesIO(r.content), int(r.headers['Content-Length']), r.headers['Content-Type'])
-        return _cache_storage.presigned_get_object(provider, object_name, expires=timedelta(minutes=3))
+            _readwrite_storage.put_object(provider, object_name, io.BytesIO(r.content), int(r.headers['Content-Length']), r.headers['Content-Type'])
+        return _readwrite_storage.presigned_get_object(provider, object_name, expires=timedelta(minutes=3))
     elif collection == 'deezer':
         if isinstance(named_id, int):
             named_id = 'deezer:{}'.format(named_id)

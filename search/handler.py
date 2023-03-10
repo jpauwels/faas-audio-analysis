@@ -5,6 +5,7 @@ import requests
 from requests.exceptions import HTTPError
 import pymongo
 from bson.son import SON
+from .secrets import get_secrets
 
 
 descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration']
@@ -17,6 +18,7 @@ _key_variants = ['edma', 'krumhansl', 'temperley']
 _chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
 _moods = ('agressive', 'happy', 'relaxed', 'sad')
 _client = None
+_secrets = get_secrets(['database-connection'])
 
 
 def handle(event, context):
@@ -307,6 +309,6 @@ def _get_client():
     global _client
     if _client is None:
         sys.stderr.write('Connecting to DB\n')
-        _client = pymongo.MongoClient(os.getenv('MONGO_CONNECTION'))
+        _client = pymongo.MongoClient(_secrets['database-connection'])
     sys.stderr.write('Connected to DB: {}\n'.format(_client))
     return _client
