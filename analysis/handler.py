@@ -1,6 +1,7 @@
 import os
 import sys
 import itertools
+from distutils.util import strtobool
 from accept_types import get_best_match
 import pymongo
 import requests
@@ -87,7 +88,8 @@ def handle(event, context):
             if event.body:
                 result = calculate_descriptor(named_id, event.body, descriptor)
             else:
-                result = get_descriptor(collection, named_id, descriptor)
+                overwrite = bool(strtobool(event.query['overwrite'])) if 'overwrite' in event.query else False
+                result = get_descriptor(collection, named_id, descriptor, overwrite)
             if descriptor == 'essentia-music':
                 response.update(essentia_descriptor_output(essentia_descriptors, result))
             else:
@@ -142,16 +144,17 @@ def rewrite_descriptor_output(descriptor, result):
     return response
 
 
-def get_descriptor(collection, named_id, descriptor):
+def get_descriptor(collection, named_id, descriptor, overwrite):
     db = _get_client()[collection]
     try:
         named_id = config.alias_id(collection, named_id, db)
     except:
         pass
-    result = db.descriptors.find_one({'_id': named_id, descriptor: {'$exists': True}})
-    if result is not None:
-        sys.stderr.write('Result found in DB\n')
-        return result[descriptor]
+    if not overwrite:
+        result = db.descriptors.find_one({'_id': named_id, descriptor: {'$exists': True}})
+        if result is not None:
+            sys.stderr.write('Result found in DB\n')
+            return result[descriptor]
 
     try:
         uri = config.audio_uri(collection, named_id)
