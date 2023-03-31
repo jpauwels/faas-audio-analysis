@@ -11,30 +11,30 @@ def audio_uri(collection, linked_id):
         provider, provider_id = validate_audiocommons_id(linked_id)
         return audiocommons_uri(provider, provider_id)
     else:
-        raise ValueError('Unknown collection "{}"'.format(collection))
+        raise ValueError('Unknown collection "{collection}"')
 
 
 def validate_audiocommons_id(linked_id):
     try:
         provider, provider_id = linked_id.split(':')
     except ValueError:
-        raise ValueError('Malformed id "{}". Needs to be of the form "content-provider:provider-id"'.format(linked_id))
+        raise ValueError(f'Malformed id "{linked_id}". Needs to be of the form "content-provider:provider-id"')
     if provider not in namespaces['audiocommons']:
-        raise ValueError('Unknown content provider "{}". Allowed providers are : {}'.format(provider, namespaces['audiocommons']))
+        raise ValueError(f'Unknown content provider "{provider}". Allowed providers are : {namespaces["audiocommons"]}')
     return provider, provider_id
 
 
 def audiocommons_uri(provider, provider_id):
     if provider == 'jamendo-tracks':
-        return 'https://prod-1.storage.jamendo.com/download/track/{}/flac/'.format(provider_id)
+        return f'https://prod-1.storage.jamendo.com/download/track/{provider_id}/flac/'
     elif provider == 'freesound-sounds':
-        r = requests.get('https://freesound.org/apiv2/sounds/{id}/'.format(id=provider_id), params={'token': _secrets['freesound-api-key'], 'fields': 'previews'})
+        r = requests.get(f'https://freesound.org/apiv2/sounds/{provider_id}/', params={'token': _secrets['freesound-api-key'], 'fields': 'previews'})
         return r.json()['previews']['preview-hq-ogg']
     elif provider == 'europeana-res':
-        r = requests.get('http://www.europeana.eu/api/v2/record/{id}.json'.format(id=provider_id), params={'wskey': _secrets['europeana-api-key']})
+        r = requests.get(f'http://www.europeana.eu/api/v2/record/{provider_id}.json', params={'wskey': _secrets['europeana-api-key']})
         if r.status_code == requests.codes['ok'] and r.json()['success']:
             return r.json()['object']['aggregations'][0]['edmIsShownBy']
         else:
-            raise  ValueError('The audio file for id "{}" could not be retrieved from Europeana'.format(provider_id))
+            raise  ValueError(f'The audio file for id "{provider_id}" could not be retrieved from Europeana')
     else:
-        raise ValueError('Unknown AudioCommons audio provider "{}"'.format(provider))
+        raise ValueError(f'Unknown AudioCommons audio provider "{provider}"')

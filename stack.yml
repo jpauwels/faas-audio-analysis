@@ -14,10 +14,8 @@ functions:
       - database-connection
       - freesound-api-key
       - europeana-api-key
-      - object-store-readwrite-access
-      - object-store-readwrite-secret
-      - object-store-readonly-access
-      - object-store-readonly-secret
+      - object-store-access-key
+      - object-store-secret-key
     environment:
       CHORD_API: 'http://gateway:8080/function/confident-chord-estimator'
       ESSENTIA_API: 'http://gateway:8080/function/essentia'
