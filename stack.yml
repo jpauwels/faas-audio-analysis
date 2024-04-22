@@ -26,7 +26,6 @@ functions:
       read_timeout: 1m
       write_timeout: 60m
       exec_timeout: 60m
-      combine_output: false
   sonic-annotator:
     lang: dockerfile
     handler: ./sonic-annotator
@@ -37,6 +36,7 @@ functions:
       write_timeout: 5m
       exec_timeout: 5m
       combine_output: false
+      content_type: application/json
   confident-chord-estimator:
     lang: python3-http
     handler: ./confident-chord-estimator
@@ -49,7 +49,6 @@ functions:
       read_timeout: 1m
       write_timeout: 5m
       exec_timeout: 5m
-      combine_output: false
   instrument-identifier:
     lang: dockerfile
     handler: ./instrument-identifier
@@ -60,6 +59,7 @@ functions:
       write_timeout: 5m
       exec_timeout: 5m
       combine_output: false
+      content_type: application/json
   essentia:
     lang: dockerfile
     handler: ./essentia
@@ -70,6 +70,7 @@ functions:
       write_timeout: 5m
       exec_timeout: 5m
       combine_output: false
+      content_type: application/json
   essentia-tensorflow:
     lang: python3-http-debian
     handler: ./essentia-tensorflow
@@ -81,7 +82,6 @@ functions:
       read_timeout: 1m
       write_timeout: 59m
       exec_timeout: 59m
-      combine_output: false
   search:
     lang: python3-http
     handler: ./search
@@ -96,7 +96,6 @@ functions:
       read_timeout: 1m
       write_timeout: 60m
       exec_timeout: 60m
-      combine_output: false
 
 configuration:
   templates:
