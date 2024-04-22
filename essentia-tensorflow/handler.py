@@ -37,10 +37,18 @@ def handle(event, context):
             "body": {'error': 'Please pass one or more model names out of "{}" in the path'.format('", "'.join(predictors.keys()))},
         }
 
-    sample_rate = 16000
     with tempfile.NamedTemporaryFile('wb') as audio_file:
         audio_file.write(event.body)
-        samples = MonoLoader(filename=audio_file.name, sampleRate=sample_rate)()
+        response = run_models(audio_file.name, model_names)
+
+    return {
+        "statusCode": 200,
+        "body": response,
+    }
+
+
+def run_models(audio_path, model_names):
+    samples = MonoLoader(filename=audio_path, sampleRate=16000)()
 
     input_map = {'musicnn': [], 'vggish': []}
     for model_name in model_names:
@@ -100,8 +108,4 @@ def handle(event, context):
                 predictors[model_name].poolOut.disconnect(ptt[model_name].pool)
 
     stats = PoolAggregator(defaultStats=['mean'])(pool)
-    response = {model_name: stats[f'{model_name}.mean'].tolist() for model_name in model_names}
-    return {
-        "statusCode": 200,
-        "body": response,
-    }
+    return {model_name: stats[f'{model_name}.mean'].tolist() for model_name in model_names}
