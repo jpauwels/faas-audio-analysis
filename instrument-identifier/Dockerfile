@@ -1,4 +1,4 @@
-FROM ghcr.io/openfaas/classic-watchdog:0.1.5 as watchdog
+FROM ghcr.io/openfaas/classic-watchdog:0.2.3 as watchdog
 
 FROM jpauwels/vampy-instrument-identification
 
