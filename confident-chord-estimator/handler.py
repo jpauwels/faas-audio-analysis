@@ -101,6 +101,6 @@ def handle(event, context):
     response['chordRatio'].update({k: v/chord_duration for k, v in response['chordRatio'].items()})
     response['distinctChords'] = len(response['chordRatio'])
     return {
-        "statusCode": 200,
-        "body": response,
+        'statusCode': 200,
+        'body': response,
     }

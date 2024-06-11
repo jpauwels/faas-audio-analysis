@@ -8,7 +8,7 @@ from bson.son import SON
 from .secrets import get_secrets
 
 
-descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration']
+all_descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration']
 all_collections = ['audiocommons', 'deezer', 'ilikemusic']
 namespaces = {'audiocommons': ['jamendo-tracks', 'freesound-sounds', 'europeana-res'],
               'deezer': ['deezer'],
@@ -23,47 +23,72 @@ _secrets = get_secrets(['database-connection'])
 
 def handle(event, context):
     try:
-        unknown_descriptors = list(filter(lambda d: d not in descriptors+['namespaces'], event.query.keys()))
-        if unknown_descriptors:
-            raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
-            's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(descriptors)))
-
-        collection, *paging = event.path.lstrip('/').split('/')
+        if event.path == '/descriptors':
+            return {
+                'statusCode': 200,
+                'body': all_descriptors,
+            }
+        if event.path == '/collections':
+            return {
+                'statusCode': 200,
+                'body': all_collections,
+            }
+        collection, *req_namespaces = event.path.strip('/').split('/')
         if collection not in all_collections:
             raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
-        try:
-            num_results = int(paging[0]) if len(paging) > 0 and paging[0] else 1
-            offset = int(paging[1]) if len(paging) > 1 and paging[1] else 0
-        except ValueError:
-            raise HTTPError(400, 'Invalid paging controls "{}". The correct syntax is "search/<collection>[/<num-results>[/<offset>]]"'.format(paging))
+        if 'namespaces' in req_namespaces:
+            return {
+                'statusCode': 200,
+                'body': namespaces[collection],
+            }
+        unknown_namespaces = list(filter(lambda p: p not in namespaces[collection], req_namespaces))
+        if unknown_namespaces:
+            raise HTTPError(400, 'Unknown namespace{} "{}". Allowed namespaces are : "{}"'.format(
+                's' if len(unknown_namespaces) > 1 else '', '", "'.join(unknown_namespaces), '", "'.join(namespaces[collection])
+        ))
 
-        if event.body:
-            query = text_search_params(event.body, event.query)
+        query = dict(event.query)
+        num_results = int(query.pop('limit', '1'))
+        offset = int(query.pop('skip', '0'))
+        unknown_descriptors = list(filter(lambda d: d not in all_descriptors, query.keys()))
+        if unknown_descriptors:
+            raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors for searching are : "{}"'.format(
+                's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(all_descriptors)
+            ))
+
+        if event.method == 'GET':
+            if event.body:
+                raise HTTPError(400, 'Unexpected body in request. Perhaps you meant to POST?')
+        elif event.method == 'POST':
+            if not event.body:
+                raise HTTPError(400, 'Missing audio body')
+            query = text_search_params(event.body, query)
         else:
-            query = event.query
+            raise HTTPError(405, f'{event.method} Method Not Allowed')
 
         return {
-            "statusCode": 200,
-            "body": search(collection, query, num_results, offset),
+            'statusCode': 200,
+            'body': search(collection, req_namespaces, query, num_results, offset),
         }
     except HTTPError as e:
         return {
-            "statusCode": e.errno,
-            "body": str(e),
+            'statusCode': e.errno,
+            'body': {'error': e.strerror},
         }
 
 
 def text_search_params(audio_content, audio_query):
-    analysis_descriptors = [k for k,v in audio_query.items() if k != 'namespaces' and (k not in ['tempo', 'tuning', 'duration'] or v)]
-    analysis_response = requests.get(f"{os.getenv('ANALYSIS_API')}/{'/'.join(analysis_descriptors)}", data=audio_content)
-    analysis_response.raise_for_status()
+    analysis_descriptors = [k for k,v in audio_query.items() if k not in ['tempo', 'tuning', 'duration'] or v]
+    if len(analysis_descriptors) == 0:
+        raise HTTPError(400, 'Specify at least one search criterion when querying by audio file')
+    analysis_response = requests.post(f"{os.getenv('ANALYSIS_API')}?descriptors={','.join(analysis_descriptors)}", data=audio_content)
+    if analysis_response.status_code != 200:
+        raise HTTPError(analysis_response.status_code, analysis_response.json()['error'])
     query_descriptors = analysis_response.json()
 
     text_params = {}
     for descriptor, audio_params in audio_query.items():
-        if descriptor == 'namespaces':
-            text_params[descriptor] = audio_params
-        elif descriptor in ['tempo', 'tuning', 'duration']:
+        if descriptor in ['tempo', 'tuning', 'duration']:
             if audio_params == '':
                 text_params[descriptor] = ''
             elif audio_params[0] in ['<', '>']:
@@ -83,17 +108,12 @@ def text_search_params(audio_content, audio_query):
     return text_params
 
 
-def search(collection, text_query, num_results, offset):
+def search(collection, req_namespaces, text_query, num_results, offset):
     agg_pipeline = []
     projection = {'_id': False, 'id': '$_id'}
 
-    if 'namespaces' in text_query:
-        allowed_namespaces = text_query['namespaces'].split(',')
-        unknown_namespaces = list(filter(lambda p: p not in namespaces[collection], allowed_namespaces))
-        if unknown_namespaces:
-            raise HTTPError(400, 'Unknown namespace{} "{}". Allowed namespaces are : "{}"'.format(
-            's' if len(unknown_namespaces) > 1 else '', '", "'.join(unknown_namespaces), '", "'.join(namespaces[collection])))
-        agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(allowed_namespaces)}}})
+    if req_namespaces:
+        agg_pipeline.append({'$match': {'_id': {'$regex': '^'+'|^'.join(req_namespaces)}}})
     if 'duration' in text_query:
         agg_pipeline.extend(_parse_single_number_query('duration', text_query['duration'], 'essentia-music.metadata.audio_properties.length'))
         projection['duration'] = '$essentia-music.metadata.audio_properties.length'
@@ -113,7 +133,7 @@ def search(collection, text_query, num_results, offset):
     if 'mood' in text_query:
         agg_pipeline.extend(_parse_mood_query(text_query['mood']))
         projection['mood'] = '$maxMood'
-    
+
     agg_pipeline.extend([{'$skip': offset}, {'$limit': num_results}])
     agg_pipeline.append({'$project': projection})
 

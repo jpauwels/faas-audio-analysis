@@ -32,42 +32,52 @@ def handle(event, context):
     """handle a request to the function
     """
     try:
-        if event.body:
-            descriptors = event.path.strip('/').split('/')
-            named_id = event.query.get('id', 'undefined')
-        else:
-            collection, *descriptors = event.path.strip('/').split('/')
+        if event.method == 'GET':
+            if event.path == '/descriptors':
+                return {
+                    'statusCode': 200,
+                    'body': list(supported_output.keys()),
+                }
+            if event.path == '/collections':
+                return {
+                    'statusCode': 200,
+                    'body': config.all_collections,
+                }
+            if event.body:
+                raise HTTPError(400, 'Unexpected body in request. Perhaps you meant to POST?')
+            collection, *named_ids = event.path.strip('/').split('/')
             if collection not in config.all_collections:
                 raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
-            if 'namespaces' in descriptors:
+            if 'namespaces' in named_ids:
                 return {
-                    "statusCode": 200,
-                    "body": config.namespaces[collection],
+                    'statusCode': 200,
+                    'body': config.namespaces[collection],
                 }
-            elif 'descriptors' in descriptors:
-                return {
-                    "statusCode": 200,
-                    "body": list(supported_output.keys()),
-                }
-            elif 'id' in event.query:
-                named_id = event.query['id']
-            else:
+            if not named_ids:
                 raise HTTPError(204, 'Nothing to do')
-
-        if 'all' in descriptors:
-            descriptors = list(supported_output.keys())
+        elif event.method == 'POST':
+            if not event.body:
+                raise HTTPError(400, 'Missing audio body')
+            named_ids = [event.path.lstrip('/')]
         else:
+            raise HTTPError(405, f'{event.method} Method Not Allowed')
+
+        try:
+            descriptors = event.query['descriptors'].split(',')
             unknown_descriptors = list(filter(lambda d: d not in supported_output.keys(), descriptors))
             if unknown_descriptors:
                 raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
-                's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(supported_output.keys())))
+                    's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(supported_output.keys())
+                ))
+        except KeyError:
+            descriptors = list(supported_output.keys())
 
         accept_header = event.headers.get('accept', '*/*')
         acceptables = [s for s in supported_output[descriptors[0]] if all([s in supported_output[k] for k in descriptors[1:]])]
         mime_type = get_best_match(accept_header, acceptables)
         if not mime_type:
             raise HTTPError(406, 'No MIME type in "{}" acceptable for descriptor{} "{}". The accepted type{} "{}".'.format(
-                accept_header, 
+                accept_header,
                 's' if len(descriptors) > 1 else '',
                 '", "'.join(descriptors),
                 's are' if len(acceptables) > 1 else ' is',
@@ -83,35 +93,40 @@ def handle(event, context):
                 req_descriptors.append(descriptor)
         if essentia_descriptors:
             req_descriptors.append('essentia-music')
-        
-        response = {'id': named_id}
 
-        for descriptor in req_descriptors:
-            if event.body:
-                result = calculate_descriptor(named_id, event.body, descriptor)
-            else:
-                overwrite = bool(strtobool(event.query['overwrite'])) if 'overwrite' in event.query else False
-                result = get_descriptor(collection, named_id, descriptor, overwrite)
-            if descriptor == 'essentia-music':
-                response.update(essentia_descriptor_output(essentia_descriptors, result))
-            else:
-                response[descriptor] = rewrite_descriptor_output(descriptor, result)
-        
-        if mime_type == 'application/json':
-            return {
-                "statusCode": 200,
-                "body": response,
-            }
-        elif mime_type == 'application/ld+json':
-            return {
-                "statusCode": 200,
-                "body": ld_converter.convert(descriptors, response, 'json-ld'),
-            }
+        response_list = []
+        for named_id in named_ids:
+            response = {'id': named_id}
 
+            for descriptor in req_descriptors:
+                if event.method == 'POST':
+                    result = calculate_descriptor(named_id, event.body, descriptor)
+                else:
+                    overwrite = bool(strtobool(event.query.get('overwrite', 'n')))
+                    result = get_descriptor(collection, named_id, descriptor, overwrite)
+                if descriptor == 'essentia-music':
+                    response.update(essentia_descriptor_output(essentia_descriptors, result))
+                else:
+                    response[descriptor] = rewrite_descriptor_output(descriptor, result)
+
+            if mime_type == 'application/ld+json':
+                response = ld_converter.convert(descriptors, response, 'json-ld')
+
+            if len(named_ids) == 1:
+                 return {
+                     'statusCode': 200,
+                    'body': response,
+                }
+            response_list.append(response)
+
+        return {
+            'statusCode': 200,
+            'body': response_list,
+        }
     except HTTPError as e:
         return {
-            "statusCode": e.errno,
-            "body": str(e),
+            'statusCode': e.errno,
+            'body': {'error': e.strerror},
         }
 
 
@@ -175,18 +190,18 @@ def get_descriptor(collection, named_id, descriptor, overwrite):
 def calculate_descriptor(file_name, audio_content, descriptor):
     file_name = file_name.lstrip('/')
     if descriptor == 'chords':
-        result = requests.get(f"{os.getenv('CHORD_API')}/{file_name}", data=audio_content)
+        result = requests.post(f"{os.getenv('CHORD_API')}/{file_name}", data=audio_content)
     elif descriptor == 'essentia-music':
-        result = requests.get(f"{os.getenv('ESSENTIA_API')}/{file_name}", data=audio_content)
+        result = requests.post(f"{os.getenv('ESSENTIA_API')}/{file_name}", data=audio_content)
     elif descriptor == 'mood':
         model_names = [f'mood_{emotion}-{architecture}-{dataset}-2' for emotion, architecture, dataset in itertools.product(['aggressive', 'happy', 'relaxed', 'sad'], ['musicnn'], ['mtt'])] #, 'vgg'], ['msd', 'mtt'])]
         result = requests.post(f"{os.getenv('ESSENTIA_TF_MODELS_API')}/{'/'.join(model_names)}", data=audio_content)
     elif descriptor == 'instruments':
         sa_arg = {'-t': '/home/app/transforms/instrument-probabilities.n3', '-w': 'jams', '--jams-stdout': ''}
-        result = requests.get(f"{os.getenv('INSTRUMENTS_API')}/{file_name}", data=audio_content, params=sa_arg)
+        result = requests.post(f"{os.getenv('INSTRUMENTS_API')}/{file_name}", data=audio_content, params=sa_arg)
     else:
         sa_arg = {'-t': '/home/app/transforms/{}.n3'.format(descriptor), '-w': 'jams', '--jams-stdout': ''}
-        result = requests.get(f"{os.getenv('SONIC_ANNOTATOR_API')}/{file_name}", data=audio_content, params=sa_arg)
+        result = requests.post(f"{os.getenv('SONIC_ANNOTATOR_API')}/{file_name}", data=audio_content, params=sa_arg)
 
     if result.status_code != requests.codes.ok or len(result.text) == 0:
         raise HTTPError(502, 'Calculation of "{}" failed'.format(descriptor))

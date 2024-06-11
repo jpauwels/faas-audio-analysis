@@ -22,19 +22,19 @@ for model_path in sorted(glob('function/classifiers/*/*.pb')):
 def handle(event, context):
     if event.method == 'GET':
         return {
-            "statusCode": 200,
-            "body": list(predictors.keys()),
+            'statusCode': 200,
+            'body': list(predictors.keys()),
         }
     elif event.method != 'POST' or not event.body:
         return {
-            "statusCode": 400,
-            "body": {'error': 'Expecting audio file to be POSTed'},
+            'statusCode': 400,
+            'body': {'error': 'Expecting audio file to be POSTed'},
         }
     model_names = event.path.strip('/').split('/')
     if not model_names[0]:
         return {
-            "statusCode": 400,
-            "body": {'error': 'Please pass one or more model names out of "{}" in the path'.format('", "'.join(predictors.keys()))},
+            'statusCode': 400,
+            'body': {'error': 'Please pass one or more model names out of "{}" in the path'.format('", "'.join(predictors.keys()))},
         }
 
     with tempfile.NamedTemporaryFile('wb') as audio_file:
@@ -42,8 +42,8 @@ def handle(event, context):
         response = run_models(audio_file.name, model_names)
 
     return {
-        "statusCode": 200,
-        "body": response,
+        'statusCode': 200,
+        'body': response,
     }
 
 
@@ -56,8 +56,8 @@ def run_models(audio_path, model_names):
             predictors[model_name]
         except KeyError:
             return {
-                "statusCode": 400,
-                "body": {'error': f'Unknown model name "{model_name}"'},
+                'statusCode': 400,
+                'body': {'error': f'Unknown model name "{model_name}"'},
             }
         if '-vggish-' in model_name:
             input_map['vggish'].append(model_name)
