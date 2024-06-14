@@ -1,6 +1,6 @@
 FROM ghcr.io/openfaas/classic-watchdog:0.2.3 as watchdog
 
-FROM jpauwels/vamp-plugins:v18.06
+FROM docker.io/jpauwels/vamp-plugins:v18.06
 
 COPY --from=watchdog /fwatchdog /usr/bin/fwatchdog
 RUN chmod +x /usr/bin/fwatchdog

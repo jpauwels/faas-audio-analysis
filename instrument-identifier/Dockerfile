@@ -1,6 +1,6 @@
 FROM ghcr.io/openfaas/classic-watchdog:0.2.3 as watchdog
 
-FROM jpauwels/vampy-instrument-identification
+FROM docker.io/jpauwels/vampy-instrument-identification
 
 COPY --from=watchdog /fwatchdog /usr/bin/fwatchdog
 RUN chmod +x /usr/bin/fwatchdog
