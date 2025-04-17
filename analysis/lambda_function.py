@@ -32,24 +32,29 @@ _instrument_names = ['Shaker', 'Electronic Beats', 'Drum Kit', 'Synthesizer', 'F
 _secrets = get_secrets(['database-connection'])
 
 
-def handle(event, context):
+def lambda_handler(event, context):
     """handle a request to the function
     """
+    method = event.get('requestContext', {}).get('http', {}).get('method')
+    body = event.get('body')
+    path = event['rawPath']
+    query = event.get('queryStringParameters', {})
+    headers = event['headers']
     try:
-        if event.method == 'GET':
-            if event.path == '/descriptors':
+        if method == 'GET':
+            if path == '/descriptors':
                 return {
                     'statusCode': 200,
                     'body': list(supported_output.keys()),
                 }
-            if event.path == '/collections':
+            if path == '/collections':
                 return {
                     'statusCode': 200,
                     'body': config.all_collections,
                 }
-            if event.body:
+            if body:
                 raise HTTPError(400, 'Unexpected body in request. Perhaps you meant to POST?')
-            collection, *named_ids = event.path.strip('/').split('/')
+            collection, *named_ids = path.strip('/').split('/')
             if collection not in config.all_collections:
                 raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
             if 'namespaces' in named_ids:
@@ -59,15 +64,15 @@ def handle(event, context):
                 }
             if not named_ids:
                 raise HTTPError(204, 'Nothing to do')
-        elif event.method == 'POST':
-            if not event.body:
+        elif method == 'POST':
+            if not body:
                 raise HTTPError(400, 'Missing audio body')
-            named_ids = [event.path.lstrip('/')]
+            named_ids = [path.lstrip('/')]
         else:
-            raise HTTPError(405, f'{event.method} Method Not Allowed')
+            raise HTTPError(405, f'{method} Method Not Allowed')
 
         try:
-            descriptors = event.query['descriptors'].split(',')
+            descriptors = query['descriptors'].split(',')
             unknown_descriptors = list(filter(lambda d: d not in supported_output.keys(), descriptors))
             if unknown_descriptors:
                 raise HTTPError(400, 'Unknown descriptor{} "{}". Allowed descriptors are : "{}"'.format(
@@ -76,7 +81,7 @@ def handle(event, context):
         except KeyError:
             descriptors = list(supported_output.keys())
 
-        accept_header = event.headers.get('accept', '*/*')
+        accept_header = headers.get('accept', '*/*')
         acceptables = [s for s in supported_output[descriptors[0]] if all([s in supported_output[k] for k in descriptors[1:]])]
         mime_type = get_best_match(accept_header, acceptables)
         if not mime_type:
@@ -103,10 +108,10 @@ def handle(event, context):
             response = {'id': named_id}
 
             for descriptor in req_descriptors:
-                if event.method == 'POST':
-                    result = calculate_descriptor(named_id, event.body, descriptor)
+                if method == 'POST':
+                    result = calculate_descriptor(named_id, body, descriptor)
                 else:
-                    overwrite = event.query.get('overwrite', 'n').lower() in ('y', 'yes', 'on', '1', 'true', 't')
+                    overwrite = query.get('overwrite', 'n').lower() in ('y', 'yes', 'on', '1', 'true', 't')
                     result = get_descriptor(collection, named_id, descriptor, overwrite)
                 if descriptor == 'essentia-music':
                     response.update(essentia_descriptor_output(essentia_descriptors, result))

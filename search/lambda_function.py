@@ -26,19 +26,23 @@ _client = None
 _secrets = get_secrets(['database-connection'])
 
 
-def handle(event, context):
+def lambda_handler(event, context):
+    method = event.get('requestContext', {}).get('http', {}).get('method')
+    body = event.get('body')
+    path = event['rawPath']
+    query = event.get('queryStringParameters', {})
     try:
-        if event.path == '/descriptors':
+        if path == '/descriptors':
             return {
                 'statusCode': 200,
                 'body': all_descriptors,
             }
-        if event.path == '/collections':
+        if path == '/collections':
             return {
                 'statusCode': 200,
                 'body': all_collections,
             }
-        collection, *req_namespaces = event.path.strip('/').split('/')
+        collection, *req_namespaces = path.strip('/').split('/')
         if collection not in all_collections:
             raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
         if 'namespaces' in req_namespaces:
@@ -52,7 +56,7 @@ def handle(event, context):
                 's' if len(unknown_namespaces) > 1 else '', '", "'.join(unknown_namespaces), '", "'.join(namespaces[collection])
         ))
 
-        query = dict(event.query)
+        query = dict(query)
         num_results = int(query.pop('limit', '1'))
         offset = int(query.pop('skip', '0'))
         unknown_descriptors = list(filter(lambda d: d not in all_descriptors, query.keys()))
@@ -61,15 +65,15 @@ def handle(event, context):
                 's' if len(unknown_descriptors) > 1 else '', '", "'.join(unknown_descriptors), '", "'.join(all_descriptors)
             ))
 
-        if event.method == 'GET':
-            if event.body:
+        if method == 'GET':
+            if body:
                 raise HTTPError(400, 'Unexpected body in request. Perhaps you meant to POST?')
-        elif event.method == 'POST':
-            if not event.body:
+        elif method == 'POST':
+            if not body:
                 raise HTTPError(400, 'Missing audio body')
-            query = text_search_params(event.body, query)
+            query = text_search_params(body, query)
         else:
-            raise HTTPError(405, f'{event.method} Method Not Allowed')
+            raise HTTPError(405, f'{method} Method Not Allowed')
 
         return {
             'statusCode': 200,

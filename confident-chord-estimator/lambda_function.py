@@ -90,8 +90,8 @@ cp = MadMomDeepChromaExtractor(samplerate, block_size, step_size)
 hmm = ChordEstimator(chromas, chord_types, type_templates, cp, chord_self_prob, silence_threshold)
 
 
-def handle(event, context):
-    start_times, end_times, chord_labels, confidence, duration = hmm(io.BytesIO(event.body))
+def lambda_handler(event, context):
+    start_times, end_times, chord_labels, confidence, duration = hmm(io.BytesIO(event.get('body')))
     response = {'confidence': confidence, 'duration': duration, 'chordSequence': [], 'chordRatio': defaultdict(int)}
     for start, end, label in zip(start_times, end_times, chord_labels):
         response['chordSequence'].append({'start': start, 'end': end, 'label': label})

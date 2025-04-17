@@ -4,9 +4,9 @@ provider:
 
 functions:
   analysis:
-    lang: python3-http
+    lang: openfaas-python-aws
     handler: ./analysis
-    image: docker.io/jpauwels/faas-analysis:latest
+    image: docker.io/jpauwels/openfaas-analysis:latest
     build_args:
       TEST_ENABLED: false
     readonly_root_filesystem: true
@@ -29,7 +29,7 @@ functions:
   sonic-annotator:
     lang: dockerfile
     handler: ./sonic-annotator
-    image: docker.io/jpauwels/faas-sonic-annotator:latest
+    image: docker.io/jpauwels/openfaas-sonic-annotator:latest
     readonly_root_filesystem: false
     environment:
       read_timeout: 1m
@@ -38,9 +38,9 @@ functions:
       combine_output: false
       content_type: application/json
   confident-chord-estimator:
-    lang: python3-http
+    lang: openfaas-python-aws
     handler: ./confident-chord-estimator
-    image: docker.io/jpauwels/faas-confident-chord-estimator:latest
+    image: docker.io/jpauwels/openfaas-confident-chord-estimator:latest
     build_args:
       ADDITIONAL_PACKAGE: ffmpeg git g++ openblas-dev
       TEST_ENABLED: false
@@ -52,7 +52,7 @@ functions:
   instrument-identifier:
     lang: dockerfile
     handler: ./instrument-identifier
-    image: docker.io/jpauwels/faas-instrument-identifier
+    image: docker.io/jpauwels/openfaas-instrument-identifier
     readonly_root_filesystem: false
     environment:
       read_timeout: 1m
@@ -63,7 +63,7 @@ functions:
   essentia:
     lang: dockerfile
     handler: ./essentia
-    image: docker.io/jpauwels/faas-essentia:latest
+    image: docker.io/jpauwels/openfaas-essentia:latest
     readonly_root_filesystem: false
     environment:
       read_timeout: 1m
@@ -72,20 +72,22 @@ functions:
       combine_output: false
       content_type: application/json
   essentia-tensorflow:
-    lang: python3-http-debian
+    lang: openfaas-python-aws
     handler: ./essentia-tensorflow
-    image: docker.io/jpauwels/faas-essentia-tensorflow:latest
+    image: docker.io/jpauwels/openfaas-essentia-tensorflow:latest
     build_args:
       TEST_ENABLED: false
+      PYTHON_VERSION: 3.11
+      PYTHON_OS: slim
     readonly_root_filesystem: true
     environment:
       read_timeout: 1m
       write_timeout: 59m
       exec_timeout: 59m
   search:
-    lang: python3-http
+    lang: openfaas-python-aws
     handler: ./search
-    image: docker.io/jpauwels/faas-search:latest
+    image: docker.io/jpauwels/openfaas-search:latest
     build_args:
       TEST_ENABLED: false
     readonly_root_filesystem: false
@@ -100,7 +102,5 @@ functions:
 configuration:
   templates:
     - name: dockerfile
-    - name: python3-http
-      source: https://github.com/jpauwels/python-flask-template#binary-payload-response
-    - name: python3-http-debian
-      source: https://github.com/jpauwels/python-flask-template#binary-payload-response
+    - name: openfaas-python-aws
+      source: https://github.com/jpauwels/faas-cloud-compatible-templates

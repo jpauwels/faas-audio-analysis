@@ -23,21 +23,24 @@ for model_path in sorted(glob('function/classifiers/*/*.pb')):
     predictors[model_name] = ess.TensorflowPredict(graphFilename=model_path, inputs=['model/Placeholder'], outputs=['model/Sigmoid'])
 
 
-def handle(event, context):
+def lambda_handler(event, context):
+    method = event.get('requestContext', {}).get('http', {}).get('method')
+    body = event.get('body')
+    path = event['rawPath']
     try:
-        if event.method == 'GET':
+        if method == 'GET':
             return {
                 'statusCode': 200,
                 'body': list(predictors.keys()),
             }
-        elif event.method != 'POST' or not event.body:
+        elif method != 'POST' or not body:
             raise HTTPError(None, 400, 'Expecting audio file to be POSTed', None, None)
-        model_names = event.path.strip('/').split('/')
+        model_names = path.strip('/').split('/')
         if not model_names[0]:
             raise HTTPError(None, 400, 'Please pass one or more model names out of "{}" in the path'.format('", "'.join(predictors.keys())), None, None)
 
         with tempfile.NamedTemporaryFile('wb') as audio_file:
-            audio_file.write(event.body)
+            audio_file.write(body)
             response = run_models(audio_file.name, model_names)
 
         return {
@@ -88,18 +91,18 @@ def run_models(audio_path, model_names):
             fc = ess.FrameCutter(frameSize=frame_size[input_type], hopSize=frame_hop[input_type], startFromZero=True, validFrameThresholdRatio=1)
             vtt = ess.VectorRealToTensor(shape=[1, 1, patch_size[input_type], num_bands[input_type]], patchHopSize=patch_hop[input_type], lastPatchMode='discard')
             ttp = ess.TensorToPool(namespace='model/Placeholder')
-        
+
             input_vector.data >> fc.signal
             fc.frame >> input_format[input_type].frame
             input_format[input_type].bands >> vtt.frame
             vtt.tensor >> ttp.tensor
-        
+
             ptt = {}
             ttv = {}
             for model_name in type_models:
                 ptt[model_name] = ess.PoolToTensor(namespace='model/Sigmoid')
                 ttv[model_name] = ess.TensorToVectorReal()
-                
+
                 ttp.pool >> predictors[model_name].poolIn
                 predictors[model_name].poolOut >> ptt[model_name].pool
                 ptt[model_name].tensor >> ttv[model_name].tensor
