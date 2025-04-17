@@ -1,0 +1,18 @@
+- id: instrument-identifier
+  execute-command: "/home/app/run-sonic-annotator.sh"
+  command-working-directory: "/tmp"
+  include-command-output-in-response: true
+  response-headers:
+    - name: Content-Type
+      value: application/json
+  pass-arguments-to-command:
+    - source: entire-query
+  pass-file-to-command:
+    - source: payload
+      name: audio_data
+      envname: AUDIO_DATA
+      base64decode: true
+  pass-environment-to-command:
+    - source: payload
+      name: audio_path
+      envname: AUDIO_PATH

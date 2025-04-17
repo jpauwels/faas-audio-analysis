@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-_secrets_dir = Path('/var/openfaas/secrets')
+_secrets_dir = Path('/run/secrets')
 
 
 def get_secrets(names=None):

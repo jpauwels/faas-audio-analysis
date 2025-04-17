@@ -1,0 +1,58 @@
+services:
+  analysis:
+    image: docker.io/jpauwels/faas-analysis:latest
+    pull_policy: missing
+    build:
+      context: https://github.com/jpauwels/faas-cloud-compatible-templates.git#main:template/flask-python-aws
+      additional_contexts:
+        function: ./analysis
+      args:
+        TEST_ENABLED: false
+        PYTHON_VERSION: 3.13
+  confident-chord-estimator:
+    image: docker.io/jpauwels/faas-confident-chord-estimator:latest
+    pull_policy: missing
+    build:
+      context: https://github.com/jpauwels/faas-cloud-compatible-templates.git#main:template/flask-python-aws
+      additional_contexts:
+        function: ./confident-chord-estimator
+      args:
+        ADDITIONAL_PACKAGE: ffmpeg git g++ openblas-dev
+        TEST_ENABLED: false
+  essentia:
+    image: docker.io/jpauwels/faas-essentia:latest
+    pull_policy: missing
+    build:
+      context: ./essentia
+  essentia-tensorflow:
+    image: docker.io/jpauwels/faas-essentia-tensorflow:latest
+    pull_policy: missing
+    build:
+      context: https://github.com/jpauwels/faas-cloud-compatible-templates.git#main:template/flask-python-aws
+      additional_contexts:
+        function: ./essentia-tensorflow
+      args:
+        TEST_ENABLED: false
+        PYTHON_VERSION: 3.11
+        PYTHON_OS: slim
+  instrument-identifier:
+    image: docker.io/jpauwels/faas-instrument-identifier:latest
+    pull_policy: missing
+    build:
+      context: ./instrument-identifier
+    read_only: false
+  search:
+    image: docker.io/jpauwels/faas-search:latest
+    pull_policy: missing
+    build:
+      context: https://github.com/jpauwels/faas-cloud-compatible-templates.git#main:template/flask-python-aws
+      additional_contexts:
+        function: ./search
+      args:
+        TEST_ENABLED: false
+  sonic-annotator:
+    image: docker.io/jpauwels/faas-sonic-annotator:latest
+    pull_policy: missing
+    build:
+      context: ./sonic-annotator
+    read_only: false

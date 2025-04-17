@@ -2,12 +2,18 @@
 @prefix vamp:     <http://purl.org/ontology/vamp/> .
 @prefix :         <#> .
 
+:transform_plugin a vamp:Plugin ;
+    vamp:identifier "qm-keydetector" .
+
+:transform_library a vamp:PluginLibrary ;
+    vamp:identifier "qm-vamp-plugins" ;
+    vamp:available_plugin :transform_plugin .
+
 :transform a vamp:Transform ;
-    vamp:plugin <http://vamp-plugins.org/rdf/plugins/qm-vamp-plugins#qm-keydetector> ;
-    vamp:sample_rate "44100"^^xsd:int ;
-    vamp:step_size "32768"^^xsd:int ; 
-    vamp:block_size "32768"^^xsd:int ; 
-    vamp:plugin_version """4""" ; 
+    vamp:plugin :transform_plugin ;
+    vamp:step_size "32768"^^xsd:int ;
+    vamp:block_size "32768"^^xsd:int ;
+    vamp:plugin_version """6""" ;
     vamp:parameter_binding [
         vamp:parameter [ vamp:identifier "length" ] ;
         vamp:value "10"^^xsd:float ;
@@ -16,4 +22,4 @@
         vamp:parameter [ vamp:identifier "tuning" ] ;
         vamp:value "440"^^xsd:float ;
     ] ;
-    vamp:output <http://vamp-plugins.org/rdf/plugins/qm-vamp-plugins#qm-keydetector_output_key> .
+    vamp:output [ vamp:identifier "key" ] .

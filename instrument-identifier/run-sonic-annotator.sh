@@ -1,21 +1,20 @@
-#!/bin/bash
+#!/bin/sh
 
 
-# Get audio file path
-audio_path="$1"
+# Get audio file path if given
+audio_path="$AUDIO_PATH"
 if [ -z "${audio_path}" ]; then
     audio_path="audio"
 fi
 
-# Store standard input into audio file
+# Link audio data to audio path
 mkdir -p "$(dirname -- "${audio_path}")"
-cat > "${audio_path}"
+ln $AUDIO_DATA "${audio_path}"
 
 # Call Sonic Annotator with arguments and file path
-shift
-arguments="$@"
-echo Calling sonic-annotator ${arguments} "${audio_path}" 1>&2
-sonic-annotator ${arguments} "${audio_path}"
+arguments=$(echo "$@" | jq -r ". | to_entries[] | [.key, .value] | .[]")
+echo Calling sonic-annotator ${arguments} "${audio_path}" > /dev/null
+sonic-annotator ${arguments} "${audio_path}" 2> /dev/null
 error_code=$?
 
 # Clean up audio file

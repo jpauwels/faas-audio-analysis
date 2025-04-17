@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 
 # Get audio file path

@@ -8,6 +8,7 @@ import requests
 from requests.exceptions import HTTPError
 import os.path
 from urllib.parse import urlsplit
+from base64 import b64encode
 from . import config
 from . import ld_converter
 from .secrets import get_secrets
@@ -207,16 +208,16 @@ def calculate_descriptor(file_name, audio_content, descriptor):
     if descriptor == 'chords':
         result = requests.post(f"{os.getenv('CHORD_API')}/{file_name}", data=audio_content)
     elif descriptor == 'essentia-music':
-        result = requests.post(f"{os.getenv('ESSENTIA_API')}/{file_name}", data=audio_content)
+        result = requests.post(f"{os.getenv('ESSENTIA_API')}/{file_name}", data=audio_content, headers={'Content-Type': 'audio/*'})
     elif descriptor == 'mood':
         model_names = [f'mood_{emotion}-{architecture}-{dataset}-2' for emotion, architecture, dataset in itertools.product(['aggressive', 'happy', 'relaxed', 'sad'], ['musicnn'], ['mtt'])] #, 'vgg'], ['msd', 'mtt'])]
         result = requests.post(f"{os.getenv('ESSENTIA_TF_MODELS_API')}/{'/'.join(model_names)}", data=audio_content)
     elif descriptor == 'instruments':
         sa_arg = {'-t': '/home/app/transforms/instrument-probabilities.n3', '-w': 'jams', '--jams-stdout': ''}
-        result = requests.post(f"{os.getenv('INSTRUMENTS_API')}/{file_name}", data=audio_content, params=sa_arg)
+        result = requests.post(f"{os.getenv('INSTRUMENTS_API')}/instrument-identifier", data={'audio_data': b64encode(audio_content), 'audio_path': file_name}, params=sa_arg)
     else:
         sa_arg = {'-t': '/home/app/transforms/{}.n3'.format(descriptor), '-w': 'jams', '--jams-stdout': ''}
-        result = requests.post(f"{os.getenv('SONIC_ANNOTATOR_API')}/{file_name}", data=audio_content, params=sa_arg)
+        result = requests.post(f"{os.getenv('SONIC_ANNOTATOR_API')}/sonic-annotator", data={'audio_data': b64encode(audio_content), 'audio_path': file_name}, params=sa_arg)
 
     if result.status_code != requests.codes.ok or len(result.text) == 0:
         raise HTTPError(502, 'Calculation of "{}" failed'.format(descriptor))

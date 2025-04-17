@@ -1,21 +1,27 @@
-FROM ghcr.io/openfaas/classic-watchdog:0.3.3 AS watchdog
+FROM busybox:1 AS downloader
+
+ADD https://github.com/adnanh/webhook/releases/download/2.8.2/webhook-linux-amd64.tar.gz .
+RUN tar xzvf webhook-linux-amd64.tar.gz
+
 
 FROM docker.io/jpauwels/vampy-instrument-identification
 
-COPY --chmod=755 --from=watchdog /fwatchdog /usr/bin/fwatchdog
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends jq \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=downloader /webhook-linux-amd64/webhook /usr/local/bin
 
 # Add non root user
-RUN addgroup --system app && adduser app --system --ingroup app
-WORKDIR /home/app
-RUN mkdir transforms && mv /root/*.n3 transforms && chown -R app:app transforms /usr/local/lib/vamp
+# RUN addgroup --system app && adduser app --system --ingroup app
+# WORKDIR /home/app
+# RUN mkdir transforms && mv /root/*.n3 transforms && chown -R app:app transforms /usr/local/lib/vamp
 
-COPY --chown=app:app openfaas_entrypoint.sh openfaas_entrypoint.sh
+WORKDIR /home/app
+COPY --chown=app:app hooks.yaml .
 COPY --chown=app:app run-sonic-annotator.sh run-sonic-annotator.sh
-WORKDIR /tmp
 USER app
 
-# Populate example here - i.e. "cat", "sha512sum" or "node index.js"
-ENV fprocess="/home/app/openfaas_entrypoint.sh"
-EXPOSE 8080
-HEALTHCHECK --interval=3s CMD [ -e /tmp/.lock ] || exit 1
-CMD [ "fwatchdog" ]
+ENTRYPOINT ["webhook"]
+CMD ["-hooks", "hooks.yaml", "-verbose", "-port", "5000", "-http-methods", "POST", "-urlprefix", ""]
+EXPOSE 5000
