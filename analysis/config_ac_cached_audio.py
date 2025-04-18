@@ -4,7 +4,7 @@ import minio
 import io
 import os.path
 import urllib.parse
-import cgi
+from email.message import Message
 import mimetypes
 from datetime import timedelta
 from .config_ac_direct_audio import all_collections, namespaces, validate_audiocommons_id, audiocommons_uri
@@ -27,18 +27,17 @@ def audio_uri(collection, named_id):
             url = audiocommons_uri(provider, provider_id)
             r = requests.get(url)
             r.raise_for_status()
+            msg = Message()
             try:
-                _, params = cgi.parse_header(r.headers['Content-Disposition'])
-                try:
-                    file_name = params['filename*']
-                except KeyError:
-                    file_name = params['filename']
+                msg['Content-Disposition'] = r.headers['Content-Disposition']
+                file_name = msg.get_filename()
                 file_ext = os.path.splitext(file_name)[1]
             except KeyError:
                 file_ext = os.path.splitext(urllib.parse.urlparse(url).path)[1]
                 if not file_ext:
                     try:
-                        file_ext = mimetypes.guess_extension(cgi.parse_header(r.headers['Content-Type'])[0])
+                        msg['Content-Type'] = r.headers['Content-Type']
+                        file_ext = mimetypes.guess_extension(msg.get_content_type())
                     except KeyError:
                         pass
                     file_ext = '' if file_ext is None else file_ext

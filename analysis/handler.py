@@ -1,7 +1,6 @@
 import os
 import sys
 import itertools
-from distutils.util import strtobool
 from accept_types import get_best_match
 import pymongo
 import requests
@@ -102,7 +101,7 @@ def handle(event, context):
                 if event.method == 'POST':
                     result = calculate_descriptor(named_id, event.body, descriptor)
                 else:
-                    overwrite = bool(strtobool(event.query.get('overwrite', 'n')))
+                    overwrite = event.query.get('overwrite', 'n').lower() in ('y', 'yes', 'on', '1', 'true', 't')
                     result = get_descriptor(collection, named_id, descriptor, overwrite)
                 if descriptor == 'essentia-music':
                     response.update(essentia_descriptor_output(essentia_descriptors, result))
