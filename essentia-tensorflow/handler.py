@@ -2,6 +2,7 @@ from glob import glob
 import os
 import tempfile
 from math import ceil
+from urllib.error import HTTPError
 import numpy as np
 import essentia.streaming as ess
 from essentia import Pool, run, reset
@@ -20,31 +21,31 @@ for model_path in sorted(glob('function/classifiers/*/*.pb')):
 
 
 def handle(event, context):
-    if event.method == 'GET':
+    try:
+        if event.method == 'GET':
+            return {
+                'statusCode': 200,
+                'body': list(predictors.keys()),
+            }
+        elif event.method != 'POST' or not event.body:
+            raise HTTPError(None, 400, 'Expecting audio file to be POSTed', None, None)
+        model_names = event.path.strip('/').split('/')
+        if not model_names[0]:
+            raise HTTPError(None, 400, 'Please pass one or more model names out of "{}" in the path'.format('", "'.join(predictors.keys())), None, None)
+
+        with tempfile.NamedTemporaryFile('wb') as audio_file:
+            audio_file.write(event.body)
+            response = run_models(audio_file.name, model_names)
+
         return {
             'statusCode': 200,
-            'body': list(predictors.keys()),
+            'body': response,
         }
-    elif event.method != 'POST' or not event.body:
+    except HTTPError as err:
         return {
-            'statusCode': 400,
-            'body': {'error': 'Expecting audio file to be POSTed'},
+            'statusCode': err.code,
+            'body': {'error': err.msg},
         }
-    model_names = event.path.strip('/').split('/')
-    if not model_names[0]:
-        return {
-            'statusCode': 400,
-            'body': {'error': 'Please pass one or more model names out of "{}" in the path'.format('", "'.join(predictors.keys()))},
-        }
-
-    with tempfile.NamedTemporaryFile('wb') as audio_file:
-        audio_file.write(event.body)
-        response = run_models(audio_file.name, model_names)
-
-    return {
-        'statusCode': 200,
-        'body': response,
-    }
 
 
 def run_models(audio_path, model_names):
@@ -55,10 +56,7 @@ def run_models(audio_path, model_names):
         try:
             predictors[model_name]
         except KeyError:
-            return {
-                'statusCode': 400,
-                'body': {'error': f'Unknown model name "{model_name}"'},
-            }
+            raise HTTPError(None, 400, f'Unknown model name "{model_name}"', None, None)
         if '-vggish-' in model_name:
             input_map['vggish'].append(model_name)
         else:
