@@ -1,11 +1,16 @@
 import os
 import sys
 import re
+import logging
 import requests
 from requests.exceptions import HTTPError
 import pymongo
 from bson.son import SON
 from .secrets import get_secrets
+
+
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 
 all_descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration']
@@ -74,6 +79,12 @@ def handle(event, context):
         return {
             'statusCode': e.errno,
             'body': {'error': e.strerror},
+        }
+    except Exception as err:
+        logger.error('Error in search function', exc_info=err)
+        return {
+            'statusCode': 500,
+            'body': {'error': 'Internal server error in search function'},
         }
 
 

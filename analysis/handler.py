@@ -1,6 +1,7 @@
 import os
 import sys
 import itertools
+import logging
 from accept_types import get_best_match
 import pymongo
 import requests
@@ -10,6 +11,10 @@ from urllib.parse import urlsplit
 from . import config
 from . import ld_converter
 from .secrets import get_secrets
+
+
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
@@ -127,6 +132,12 @@ def handle(event, context):
             'statusCode': e.errno,
             'body': {'error': e.strerror},
         }
+    except Exception as err:
+        logger.error('Error in analysis function', exc_info=err)
+        return {
+            'statusCode': 500,
+            'body': {'error': 'Internal server error in analysis function'},
+        }
 
 
 def essentia_descriptor_output(essentia_descriptors, result):
@@ -164,7 +175,7 @@ def get_descriptor(collection, named_id, descriptor, overwrite):
     db = _get_client()[collection]
     try:
         named_id = config.alias_id(collection, named_id, db)
-    except:
+    except Exception:
         pass
     if not overwrite:
         result = db.descriptors.find_one({'_id': named_id, descriptor: {'$exists': True}})

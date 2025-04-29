@@ -1,5 +1,6 @@
 from glob import glob
 import os
+import logging
 import tempfile
 from math import ceil
 from urllib.error import HTTPError
@@ -12,6 +13,8 @@ from essentia import log
 
 log.infoActive = False
 log.warningActive = False
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 
 predictors = {}
@@ -45,6 +48,12 @@ def handle(event, context):
         return {
             'statusCode': err.code,
             'body': {'error': err.msg},
+        }
+    except Exception as err:
+        logger.error('Error in essentia-tensorflow function', exc_info=err)
+        return {
+            'statusCode': 500,
+            'body': {'error': 'Internal server error in essentia-tensorflow function'},
         }
 
 
