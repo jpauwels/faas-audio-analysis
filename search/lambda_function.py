@@ -18,7 +18,7 @@ all_collections = ['audiocommons', 'deezer', 'ilikemusic']
 namespaces = {'audiocommons': ['jamendo-tracks', 'freesound-sounds', 'europeana-res'],
               'deezer': ['deezer'],
               'ilikemusic': []}
-_key_regex = re.compile('^(A#|C#|D#|F#|G#|[A-G])?(major|minor)?$')
+_key_regex = re.compile('^(C#|F#|Ab|Bb|Eb|[A-G])?(major|minor)?$')
 _key_variants = ['edma', 'krumhansl', 'temperley']
 _chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
 _moods = ('agressive', 'happy', 'relaxed', 'sad')
