@@ -9,6 +9,21 @@ services:
       args:
         TEST_ENABLED: false
         PYTHON_VERSION: 3.13
+    ports:
+      - "5001:5000"
+    environment:
+      CHORD_API: "http://confident-chord-estimator:5000"
+      ESSENTIA_API: "http://essentia:5000"
+      ESSENTIA_TF_MODELS_API: "http://essentia-tensorflow:5000"
+      INSTRUMENTS_API: "http://instrument-identifier:5000"
+      SONIC_ANNOTATOR_API: "http://sonic-annotator:5000"
+      OBJECT_STORE_HOSTNAME: "host.docker.internal:32002"
+    secrets:
+      - database-connection
+      - object-store-access-key
+      - object-store-secret-key
+      - freesound-api-key
+      - europeana-api-key
   confident-chord-estimator:
     image: docker.io/jpauwels/faas-confident-chord-estimator:latest
     pull_policy: missing
@@ -50,9 +65,27 @@ services:
         function: ./search
       args:
         TEST_ENABLED: false
+    ports:
+      - "5002:5000"
+    environment:
+      ANALYSIS_API: "http://analysis:5000"
+    secrets:
+      - database-connection
   sonic-annotator:
     image: docker.io/jpauwels/faas-sonic-annotator:latest
     pull_policy: missing
     build:
       context: ./sonic-annotator
     read_only: false
+
+secrets:
+  database-connection:
+    file: ./secrets/mongo_credentials.txt
+  object-store-access-key:
+    file: ./secrets/minio_access_key.txt
+  object-store-secret-key:
+    file: ./secrets/minio_secret_key.txt
+  freesound-api-key:
+    file: ./secrets/freesound_api_key.txt
+  europeana-api-key:
+    file: ./secrets/europeana_api_key.txt
