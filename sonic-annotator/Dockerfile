@@ -1,4 +1,4 @@
-FROM docker.io/jpauwels/sonic-annotator:v1.6-ubuntu24.04-plugins
+FROM docker.io/jpauwels/sonic-annotator:v1.7-ubuntu24.04-plugins
 
 USER root
 RUN apt-get update \
