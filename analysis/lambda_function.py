@@ -123,8 +123,8 @@ def lambda_handler(event, context):
                 response = ld_converter.convert(descriptors, response, 'json-ld')
 
             if len(named_ids) == 1:
-                 return {
-                     'statusCode': 200,
+                return {
+                    'statusCode': 200,
                     'body': response,
                 }
             response_list.append(response)
