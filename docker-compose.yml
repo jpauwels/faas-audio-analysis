@@ -18,6 +18,8 @@ services:
       INSTRUMENTS_API: "http://instrument-identifier:5000"
       SONIC_ANNOTATOR_API: "http://sonic-annotator:5000"
       OBJECT_STORE_HOSTNAME: "host.docker.internal:32002"
+    volumes:
+      - ./analysis/config_multicollections.py:/home/app/function/config.py:ro
     secrets:
       - database-connection
       - object-store-access-key
