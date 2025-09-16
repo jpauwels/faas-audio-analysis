@@ -29,6 +29,12 @@ supported_output = {
     'beats': ['application/json'],
     'mood': ['application/json'],
 }
+_descriptor_mapping = {
+    'tempo': 'essentia-music',
+    'global-key': 'essentia-music',
+    'tuning': 'essentia-music',
+    'beats': 'essentia-music'
+}
 _client = None
 _instrument_names = ['Shaker', 'Electronic Beats', 'Drum Kit', 'Synthesizer', 'Female Voice', 'Male Voice', 'Violin', 'Flute', 'Harpsichord', 'Electric Guitar', 'Clarinet', 'Choir', 'Organ', 'Acoustic Guitar', 'Viola', 'French Horn', 'Piano', 'Cello', 'Harp', 'Conga', 'Synthetic Bass', 'Electric Piano', 'Acoustic Bass', 'Electric Bass']
 _secrets = get_secrets(['database-connection'])
@@ -95,30 +101,21 @@ def lambda_handler(event, context):
                 '", "'.join(sorted(acceptables))
             ))
 
-        essentia_descriptors = []
-        req_descriptors = []
-        for descriptor in descriptors:
-            if descriptor in ['tempo', 'global-key', 'tuning', 'beats']:
-                essentia_descriptors.append(descriptor)
-            else:
-                req_descriptors.append(descriptor)
-        if essentia_descriptors:
-            req_descriptors.append('essentia-music')
-
         response_list = []
+        mapped_descriptors = {_descriptor_mapping.get(d, d) for d in descriptors}
         for named_id in named_ids:
             response = {'id': named_id}
 
-            for descriptor in req_descriptors:
+            result = {}
+            for descriptor in mapped_descriptors:
                 if method == 'POST':
-                    result = calculate_descriptor(named_id, body, descriptor)
+                    result[descriptor] = calculate_descriptor(named_id, body, descriptor)
                 else:
                     overwrite = query.get('overwrite', 'n').lower() in ('y', 'yes', 'on', '1', 'true', 't')
-                    result = get_descriptor(collection, named_id, descriptor, overwrite)
-                if descriptor == 'essentia-music':
-                    response.update(essentia_descriptor_output(essentia_descriptors, result))
-                else:
-                    response[descriptor] = rewrite_descriptor_output(descriptor, result)
+                    result[descriptor] = get_descriptor(collection, named_id, descriptor, overwrite)
+
+            for descriptor in descriptors:
+                response[descriptor] = format_descriptor_output(descriptor, result[_descriptor_mapping.get(descriptor, descriptor)])
 
             if mime_type == 'application/ld+json':
                 response = ld_converter.convert(descriptors, response, 'json-ld')
@@ -147,35 +144,29 @@ def lambda_handler(event, context):
         }
 
 
-def essentia_descriptor_output(essentia_descriptors, result):
-    response = {}
-    if 'tempo' in essentia_descriptors:
-        response['tempo'] = result['rhythm']['bpm']
-    if 'global-key' in essentia_descriptors:
+def format_descriptor_output(descriptor, result):
+    if descriptor == 'tempo':
+        return result['rhythm']['bpm']
+    if descriptor == 'global-key':
         most_likely_key = sorted([v for k, v in result['tonal'].items() if k.startswith('key_')], key=lambda v: v['strength'], reverse=True)[0]
-        response['global-key'] = {'key': most_likely_key['key']+' '+most_likely_key['scale'], 'confidence': most_likely_key['strength']}
-    if 'tuning' in essentia_descriptors:
-        response['tuning'] = result['tonal']['tuning_frequency']
-    if 'beats' in essentia_descriptors:
-        response['beats'] = result['rhythm']['beats_position']
-    return response
-
-
-def rewrite_descriptor_output(descriptor, result):
+        return {'key': most_likely_key['key']+' '+most_likely_key['scale'], 'confidence': most_likely_key['strength']}
+    if descriptor == 'tuning':
+        return result['tonal']['tuning_frequency']
+    if descriptor == 'beats':
+        return result['rhythm']['beats_position']
     if descriptor == 'instruments':
-        response = {k:v for k,v in zip(_instrument_names, result['annotations'][0]['data'][0]['value'])}
-    elif descriptor == 'chords':
+        return {k:v for k,v in zip(_instrument_names, result['annotations'][0]['data'][0]['value'])}
+    if descriptor == 'chords':
         result.pop('chordRatio')
         result.pop('distinctChords')
-        response = result
-    elif descriptor == 'keys':
-        response = [{'time': k['time'], 'label': k['label']} for k in result['annotations'][0]['data']]
-    elif descriptor == 'mood':
+        return result
+    if descriptor == 'keys':
+        return [{'time': k['time'], 'label': k['label']} for k in result['annotations'][0]['data']]
+    if descriptor == 'mood':
         renamed_result = {k.lstrip('mood_').split('-')[0]: v for k, v in result.items()}
-        response = {name: values[1] if name in ('sad', 'relaxed') else values[0] for name, values in renamed_result.items()}
+        return {name: values[1] if name in ('sad', 'relaxed') else values[0] for name, values in renamed_result.items()}
     else:
-        response = result
-    return response
+        return result
 
 
 def get_descriptor(collection, named_id, descriptor, overwrite):
