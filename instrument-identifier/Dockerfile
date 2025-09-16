@@ -12,11 +12,6 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=downloader /webhook-linux-amd64/webhook /usr/local/bin
 
-# Add non root user
-# RUN addgroup --system app && adduser app --system --ingroup app
-# WORKDIR /home/app
-# RUN mkdir transforms && mv /root/*.n3 transforms && chown -R app:app transforms /usr/local/lib/vamp
-
 WORKDIR /home/app
 COPY --chown=app:app hooks.yaml .
 COPY --chown=app:app run-sonic-annotator.sh run-sonic-annotator.sh

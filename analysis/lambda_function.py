@@ -19,15 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 # Candidate content-types: 'text/plain', 'text/n3', 'application/rdf+xml'
-supported_output = {'chords': ['application/json', 'application/ld+json'],
-                    'instruments': ['application/json'],
-                    'keys': ['application/json'],
-                    'tempo': ['application/json'],
-                    'global-key': ['application/json'],
-                    'tuning': ['application/json'],
-                    'beats': ['application/json'],
-                    'mood': ['application/json'],
-                    }
+supported_output = {
+    'chords': ['application/json', 'application/ld+json'],
+    'instruments': ['application/json'],
+    'keys': ['application/json'],
+    'tempo': ['application/json'],
+    'global-key': ['application/json'],
+    'tuning': ['application/json'],
+    'beats': ['application/json'],
+    'mood': ['application/json'],
+}
 _client = None
 _instrument_names = ['Shaker', 'Electronic Beats', 'Drum Kit', 'Synthesizer', 'Female Voice', 'Male Voice', 'Violin', 'Flute', 'Harpsichord', 'Electric Guitar', 'Clarinet', 'Choir', 'Organ', 'Acoustic Guitar', 'Viola', 'French Horn', 'Piano', 'Cello', 'Harp', 'Conga', 'Synthetic Bass', 'Electric Piano', 'Acoustic Bass', 'Electric Bass']
 _secrets = get_secrets(['database-connection'])
