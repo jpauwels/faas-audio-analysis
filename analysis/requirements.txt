@@ -1,6 +1,9 @@
 pymongo
 requests
 accept-types
+content-types
 minio
 rdflib
 rdflib-jsonld
+yt-dlp
+internetarchive

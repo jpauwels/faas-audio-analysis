@@ -61,7 +61,7 @@ def lambda_handler(event, context):
             if 'namespaces' in named_ids:
                 return {
                     'statusCode': 200,
-                    'body': config.namespaces[collection],
+                    'body': config.namespaces.get(collection, []),
                 }
             if not named_ids:
                 raise HTTPError(204, 'Nothing to do')

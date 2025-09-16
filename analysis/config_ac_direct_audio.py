@@ -29,12 +29,15 @@ def audiocommons_uri(provider, provider_id):
         return f'https://prod-1.storage.jamendo.com/download/track/{provider_id}/flac/'
     elif provider == 'freesound-sounds':
         r = requests.get(f'https://freesound.org/apiv2/sounds/{provider_id}/', params={'token': _secrets['freesound-api-key'], 'fields': 'previews'})
-        return r.json()['previews']['preview-hq-ogg']
+        if r.status_code == requests.codes['ok']:
+            return r.json()['previews']['preview-hq-ogg']
+        else:
+            raise FileNotFoundError(f'The audio file for id "{provider_id}" could not be retrieved from Freesound')
     elif provider == 'europeana-res':
-        r = requests.get(f'http://www.europeana.eu/api/v2/record/{provider_id}.json', params={'wskey': _secrets['europeana-api-key']})
+        r = requests.get(f'http://www.europeana.eu/api/v2/record/{provider_id}.json', headers={'X-Api-Key': _secrets['europeana-api-key']})
         if r.status_code == requests.codes['ok'] and r.json()['success']:
             return r.json()['object']['aggregations'][0]['edmIsShownBy']
         else:
-            raise  ValueError(f'The audio file for id "{provider_id}" could not be retrieved from Europeana')
+            raise  FileNotFoundError(f'The audio file for id "{provider_id}" could not be retrieved from Europeana')
     else:
         raise ValueError(f'Unknown AudioCommons audio provider "{provider}"')
