@@ -62,16 +62,18 @@ def lambda_handler(event, context):
                 }
             if body:
                 raise HTTPError(400, 'Unexpected body in request. Perhaps you meant to POST?')
-            collection, *named_ids = path.strip('/').split('/')
+            try:
+                collection, named_ids = path.strip('/').split('/', 1)
+            except ValueError:
+                raise HTTPError(204, 'Nothing to do')
             if collection not in config.all_collections:
                 raise HTTPError(400, 'Unknown collection "{}"'.format(collection))
-            if 'namespaces' in named_ids:
+            if named_ids == 'namespaces':
                 return {
                     'statusCode': 200,
                     'body': config.namespaces.get(collection, []),
                 }
-            if not named_ids:
-                raise HTTPError(204, 'Nothing to do')
+            named_ids = named_ids.split(',')
         elif method == 'POST':
             if not body:
                 raise HTTPError(400, 'Missing audio body')
