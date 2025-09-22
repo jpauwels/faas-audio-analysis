@@ -6,6 +6,7 @@ import requests
 from requests.exceptions import HTTPError
 import pymongo
 from bson.son import SON
+from .config import all_collections, namespaces
 from .secrets import get_secrets
 
 
@@ -14,10 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 all_descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration']
-all_collections = ['audiocommons', 'deezer', 'ilikemusic']
-namespaces = {'audiocommons': ['jamendo-tracks', 'freesound-sounds', 'europeana-res'],
-              'deezer': ['deezer'],
-              'ilikemusic': []}
 _key_regex = re.compile('^(C#|F#|Ab|Bb|Eb|[A-G])?(major|minor)?$')
 _key_variants = ['edma', 'krumhansl', 'temperley']
 _chord_regex = re.compile('^(Ab|Bb|Db|Eb|Gb|[A-G])(maj|min|7|maj7|min7)$')
@@ -48,12 +45,12 @@ def lambda_handler(event, context):
         if 'namespaces' in req_namespaces:
             return {
                 'statusCode': 200,
-                'body': namespaces[collection],
+                'body': namespaces.get(collection, []),
             }
-        unknown_namespaces = list(filter(lambda p: p not in namespaces[collection], req_namespaces))
+        unknown_namespaces = list(filter(lambda p: p not in namespaces.get(collection, []), req_namespaces))
         if unknown_namespaces:
             raise HTTPError(400, 'Unknown namespace{} "{}". Allowed namespaces are : "{}"'.format(
-                's' if len(unknown_namespaces) > 1 else '', '", "'.join(unknown_namespaces), '", "'.join(namespaces[collection])
+                's' if len(unknown_namespaces) > 1 else '', '", "'.join(unknown_namespaces), '", "'.join(namespaces.get(collection, []))
         ))
 
         query = dict(query)

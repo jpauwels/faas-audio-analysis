@@ -71,6 +71,8 @@ services:
       - "5002:5000"
     environment:
       ANALYSIS_API: "http://analysis:5000"
+    volumes:
+      - ./search/config_multicollections.py:/home/app/function/config.py:ro
     secrets:
       - database-connection
   sonic-annotator:
