@@ -12,8 +12,8 @@ from email.message import Message
 import mimetypes
 from datetime import timedelta
 from pathlib import Path
-from bson.objectid import ObjectId
 from .secrets import get_secrets
+from . import database
 
 
 _secrets = get_secrets(['object-store-access-key', 'object-store-secret-key', 'freesound-api-key', 'europeana-api-key'])
@@ -35,11 +35,11 @@ all_collections = ['jamendo', 'freesound', 'europeana', 'deezer', 'ilikemusic', 
 namespaces = {'deezer': ['deezer', 'wasabi']}
 
 
-def alias_id(collection, named_id, db):
+def alias_id(collection, named_id):
     if collection == 'deezer':
         namespace, file_id = named_id.split(':')
         if namespace == 'wasabi':
-            file_id = db.wasabi_song.find_one({'_id': ObjectId(file_id)}, {'_id': False, 'id_song_deezer': True})['id_song_deezer']
+            return database.map_id(file_id, 'deezer', 'wasabi_song', 'id_song_deezer')
         return file_id
     elif collection in ('jamendo', 'freesound'):
         return int(named_id)

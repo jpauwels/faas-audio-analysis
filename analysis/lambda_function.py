@@ -1,17 +1,15 @@
 import os
-import sys
 import itertools
 import logging
 from accept_types import get_best_match
-import pymongo
 import requests
 from requests.exceptions import HTTPError
 import os.path
 from urllib.parse import urlsplit
 from base64 import b64encode
 from . import config
+from . import database
 from . import ld_converter
-from .secrets import get_secrets
 
 
 logging.basicConfig(level=logging.ERROR)
@@ -35,9 +33,7 @@ _descriptor_mapping = {
     'tuning': 'essentia-music',
     'beats': 'essentia-music'
 }
-_client = None
 _instrument_names = ['Shaker', 'Electronic Beats', 'Drum Kit', 'Synthesizer', 'Female Voice', 'Male Voice', 'Violin', 'Flute', 'Harpsichord', 'Electric Guitar', 'Clarinet', 'Choir', 'Organ', 'Acoustic Guitar', 'Viola', 'French Horn', 'Piano', 'Cello', 'Harp', 'Conga', 'Synthetic Bass', 'Electric Piano', 'Acoustic Bass', 'Electric Bass']
-_secrets = get_secrets(['database-connection'])
 
 
 def lambda_handler(event, context):
@@ -172,15 +168,14 @@ def format_descriptor_output(descriptor, result):
 
 
 def get_descriptor(collection, named_id, descriptor, overwrite):
-    db = _get_client()[collection]
     try:
-        named_id = config.alias_id(collection, named_id, db)
+        named_id = config.alias_id(collection, named_id)
     except Exception:
         pass
     if not overwrite:
-        result = db.descriptors.find_one({'_id': named_id, descriptor: {'$exists': True}})
+        result = database.get(collection, named_id, descriptor)
         if result is not None:
-            sys.stderr.write('Result found in DB\n')
+            logger.info('Result found in DB')
             return result[descriptor]
 
     try:
@@ -190,11 +185,10 @@ def get_descriptor(collection, named_id, descriptor, overwrite):
     file_name = os.path.basename(urlsplit(uri).path)
     audio_content = requests.get(uri).content
 
-    result_content = calculate_descriptor(file_name, audio_content, descriptor)
-
-    r = db.descriptors.update_one({'_id': named_id}, {'$set': {descriptor: result_content}}, upsert=True)
-    sys.stderr.write('Result stored in DB: {}\n'.format(r.raw_result))
-    return result_content
+    calculated_descriptor = calculate_descriptor(file_name, audio_content, descriptor)
+    put_result = database.put(collection, named_id, descriptor, calculated_descriptor)
+    logger.info(f'Result stored in DB: {put_result}')
+    return calculated_descriptor
 
 
 def calculate_descriptor(file_name, audio_content, descriptor):
@@ -216,12 +210,3 @@ def calculate_descriptor(file_name, audio_content, descriptor):
     if result.status_code != requests.codes.ok or len(result.text) == 0:
         raise HTTPError(502, 'Calculation of "{}" failed'.format(descriptor))
     return result.json()
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        sys.stderr.write('Connecting to DB\n')
-        _client = pymongo.MongoClient(_secrets['database-connection'])
-    sys.stderr.write('Connected to DB: {}\n'.format(_client))
-    return _client
