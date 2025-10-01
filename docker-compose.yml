@@ -16,14 +16,19 @@ services:
       ESSENTIA_API: "http://essentia:5000"
       ESSENTIA_TF_MODELS_API: "http://essentia-tensorflow:5000"
       INSTRUMENTS_API: "http://instrument-identifier:5000"
+      L3_API: "http://open-l3:5000"
+      QVIM_API: "http://qvim:5000"
       SONIC_ANNOTATOR_API: "http://sonic-annotator:5000"
       OBJECT_STORE_HOSTNAME: "host.docker.internal:32002"
+      VECTOR_DB_URI: "http://host.docker.internal:32003"
     volumes:
       - ./analysis/config_multicollections.py:/home/app/function/config.py:ro
+      - ./analysis/database_mongo_milvus.py:/home/app/function/database.py:ro
     secrets:
       - database-connection
       - object-store-access-key
       - object-store-secret-key
+      - vector-db-token
       - freesound-api-key
       - europeana-api-key
   confident-chord-estimator:
@@ -58,6 +63,30 @@ services:
     build:
       context: ./instrument-identifier
     read_only: false
+  open-l3:
+    image: docker.io/jpauwels/faas-open-l3:latest
+    pull_policy: missing
+    build:
+      context: https://github.com/jpauwels/faas-cloud-compatible-templates.git#main:template/flask-python-aws
+      additional_contexts:
+        function: ./open-l3
+      args:
+        TEST_ENABLED: false
+        PYTHON_VERSION: 3.11
+        PYTHON_OS: slim
+        ADDITIONAL_PACKAGE: libsndfile1
+  qvim:
+    image: docker.io/jpauwels/faas-qvim:latest
+    pull_policy: missing
+    build:
+      context: https://github.com/jpauwels/faas-cloud-compatible-templates.git#main:template/flask-python-aws
+      additional_contexts:
+        function: ./qvim
+      args:
+        TEST_ENABLED: false
+        PYTHON_VERSION: 3.13
+        PYTHON_OS: slim
+        ADDITIONAL_PACKAGE: libsndfile1
   search:
     image: docker.io/jpauwels/faas-search:latest
     pull_policy: missing
@@ -81,10 +110,11 @@ services:
     build:
       context: ./sonic-annotator
     read_only: false
-
 secrets:
   database-connection:
     file: ./secrets/mongo_credentials.txt
+  vector-db-token:
+    file: ./secrets/vector_db_token.txt
   object-store-access-key:
     file: ./secrets/minio_access_key.txt
   object-store-secret-key:

@@ -1,4 +1,5 @@
 analysis/config.py
+analysis/database.py
 search/config.py
 secrets
 

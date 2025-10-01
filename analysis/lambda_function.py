@@ -26,6 +26,8 @@ supported_output = {
     'tuning': ['application/json'],
     'beats': ['application/json'],
     'mood': ['application/json'],
+    'qvim': ['application/json'],
+    'l3': ['application/json'],
 }
 _descriptor_mapping = {
     'tempo': 'essentia-music',
@@ -203,6 +205,10 @@ def calculate_descriptor(file_name, audio_content, descriptor):
     elif descriptor == 'instruments':
         sa_arg = {'-t': '/home/app/transforms/instrument-probabilities.n3', '-w': 'jams', '--jams-stdout': ''}
         result = requests.post(f"{os.getenv('INSTRUMENTS_API')}/instrument-identifier", data={'audio_data': b64encode(audio_content), 'audio_path': file_name}, params=sa_arg)
+    elif descriptor == 'qvim':
+        result = requests.post(f"{os.getenv('QVIM_API')}", data=audio_content)
+    elif descriptor == 'l3':
+        result = requests.post(f"{os.getenv('L3_API')}", data=audio_content, params={'input-repr': 'mel128', 'content-type': 'music', 'embedding-size': 512})
     else:
         sa_arg = {'-t': '/home/app/transforms/{}.n3'.format(descriptor), '-w': 'jams', '--jams-stdout': ''}
         result = requests.post(f"{os.getenv('SONIC_ANNOTATOR_API')}/sonic-annotator", data={'audio_data': b64encode(audio_content), 'audio_path': file_name}, params=sa_arg)

@@ -1,4 +1,5 @@
 pymongo
+pymilvus
 requests
 accept-types
 content-types
