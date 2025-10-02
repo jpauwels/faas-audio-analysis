@@ -50,14 +50,14 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages/essentia/ /usr/lib/p
 # Add non root user
 RUN addgroup --system app && adduser app --system --ingroup app --home /home/app && chown app:app /home/app
 
-WORKDIR /home/app
+USER app
+ENV PATH=$PATH:/home/app/.local/bin
+RUN pip install --user --break-system-packages fastapi[standard]
+
+WORKDIR /home/app/function
 COPY --chown=app:app entrypoint.py .
 COPY --chown=app:app run-essentia.sh .
 WORKDIR /tmp
 
-USER app
-RUN pip install --user --break-system-packages fastapi[standard]
-ENV PATH=$PATH:/home/app/.local/bin
-
-CMD ["fastapi", "run", "--port", "5000", "/home/app/entrypoint.py"]
+CMD ["fastapi", "run", "--port", "5000", "/home/app/function/entrypoint.py"]
 EXPOSE 5000
