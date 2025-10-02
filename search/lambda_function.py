@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 
-all_descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration']
+all_descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration', 'dominant-mood']
 _num_operator_regex = re.compile(r'^(<=|>=|<|>)(\d+(\.\d*)?)$')
 _num_tolerance_regex = re.compile(r'^(\d+(\.\d*)?) -(\d+(\.\d+)?)%$')
 _num_range_regex = re.compile(r'^(\d+(\.\d*)?)-(\d+(\.\d+)?)$')
@@ -117,9 +117,9 @@ def lambda_handler(event, context):
                     raise HTTPError(400, 'The coverage parameter for the chord search needs to be a number between 0 and 100, followed by a percentage sign and separated from the chords by a single comma')
             query['chords'] = {'chords': chords, 'coverage': coverage}
 
-        if 'mood' in query and query['mood']:
-            if query['mood'] not in _moods:
-                raise HTTPError(400, f'The mood search parameter needs to be one of {_moods.joint(" ")}')
+        if 'dominant-mood' in query and query['dominant-mood']:
+            if query['dominant-mood'] not in _moods:
+                raise HTTPError(400, f'The dominant-mood search parameter needs to be one of {{{", ".join(_moods)}}}')
 
         return {
             'statusCode': 200,
@@ -164,6 +164,8 @@ def text_search_params(audio_content, audio_query):
             text_params[descriptor] = '-'.join(list(chord_set))
             if audio_params:
                 text_params[descriptor] += ',{}'.format(audio_params)
+        elif descriptor == 'dominant-mood':
+            text_params[descriptor] = max(query_descriptors['dominant-mood'], key=query_descriptors['dominant-mood'].get)
 
     logger.info(f'Performing textual descriptor search with {text_params}')
     return text_params

@@ -31,8 +31,8 @@ def search(collection, req_namespaces, text_query, num_results, offset):
     if 'chords' in text_query:
         agg_pipeline.extend(_add_chord_query(text_query['chords']))
         projection['chords'] = True
-    if 'mood' in text_query:
-        agg_pipeline.extend(_add_mood_query(text_query['mood']))
+    if 'dominant-mood' in text_query:
+        agg_pipeline.extend(_add_mood_query(text_query['dominant-mood']))
         projection['mood'] = '$maxMood'
 
     agg_pipeline.extend([{'$skip': offset}, {'$limit': num_results}])
