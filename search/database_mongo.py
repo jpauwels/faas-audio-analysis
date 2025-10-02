@@ -9,7 +9,7 @@ _secrets = get_secrets(['database-connection'])
 _key_variants = ['edma', 'krumhansl', 'temperley']
 
 
-def search(collection, req_namespaces, text_query, num_results, offset):
+def search(collection, req_namespaces, text_query, num_results, offset, query_vector=None):
     agg_pipeline = []
     projection = {'_id': False, 'id': '$_id'}
 

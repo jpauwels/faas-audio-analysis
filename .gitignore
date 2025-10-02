@@ -1,6 +1,7 @@
 analysis/config.py
 analysis/database.py
 search/config.py
+search/database.py
 secrets
 
 # Byte-compiled / optimized / DLL files

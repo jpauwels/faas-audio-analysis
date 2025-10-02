@@ -1,4 +1,5 @@
 **/config.py
+**/database.py
 **/.cache
 
 **/__pycache__

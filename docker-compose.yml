@@ -100,10 +100,13 @@ services:
       - "5002:5000"
     environment:
       ANALYSIS_API: "http://analysis:5000"
+      VECTOR_DB_URI: "http://host.docker.internal:32003"
     volumes:
       - ./search/config_multicollections.py:/home/app/function/config.py:ro
+      - ./search/database_mongo_milvus.py:/home/app/function/database.py:ro
     secrets:
       - database-connection
+      - vector-db-token
   sonic-annotator:
     image: docker.io/jpauwels/faas-sonic-annotator:latest
     pull_policy: missing

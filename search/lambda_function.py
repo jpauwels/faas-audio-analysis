@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import logging
@@ -11,7 +12,7 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 
-all_descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration', 'dominant-mood']
+all_descriptors = ['chords', 'tempo', 'tuning', 'global-key', 'duration', 'dominant-mood', 'embedding']
 _num_operator_regex = re.compile(r'^(<=|>=|<|>)(\d+(\.\d*)?)$')
 _num_tolerance_regex = re.compile(r'^(\d+(\.\d*)?) -(\d+(\.\d+)?)%$')
 _num_range_regex = re.compile(r'^(\d+(\.\d*)?)-(\d+(\.\d+)?)$')
@@ -25,6 +26,7 @@ def lambda_handler(event, context):
     body = event.get('body')
     path = event['rawPath']
     query = event.get('queryStringParameters', {})
+    headers = event['headers']
     try:
         if path == '/descriptors':
             return {
@@ -62,14 +64,21 @@ def lambda_handler(event, context):
         if method == 'GET':
             if body:
                 raise HTTPError(400, 'Unexpected body in request. Perhaps you meant to POST?')
+            query_vector = []
         elif method == 'POST':
             if not body:
                 raise HTTPError(400, 'Missing audio body')
-            query = text_search_params(body, query)
+            query, query_vector = text_search_params(body, headers.get('content-type', 'application/octet-stream'), query)
         else:
             raise HTTPError(405, f'{method} Method Not Allowed')
 
         # Verify and parse query parameter values
+        if 'embedding' in query and query['embedding']:
+            if query['embedding'] not in ('qvim', 'l3'):
+                raise HTTPError(400, 'The embedding search parameter needs to be either "qvim" or "l3"')
+            if not query_vector:
+                raise HTTPError(400, 'Embedding search requires an audio file or query vector to be sent via POST')
+
         for descriptor in ('tempo', 'tuning', 'duration'):
             if descriptor in query and query[descriptor]:
                 try:
@@ -123,7 +132,7 @@ def lambda_handler(event, context):
 
         return {
             'statusCode': 200,
-            'body': database.search(collection, req_namespaces, query, num_results, offset),
+            'body': database.search(collection, req_namespaces, query, num_results, offset, query_vector),
         }
     except HTTPError as e:
         return {
@@ -138,34 +147,49 @@ def lambda_handler(event, context):
         }
 
 
-def text_search_params(audio_content, audio_query):
-    analysis_descriptors = [k for k,v in audio_query.items() if k not in ['tempo', 'tuning', 'duration'] or v]
+def text_search_params(body, content_type, audio_query):
+    analysis_descriptors = []
+    for k, v in audio_query.items():
+        if k == 'embedding':
+            if content_type != 'application/json':
+                analysis_descriptors.append(v)
+        elif v or k in ['tempo', 'tuning', 'duration']:
+            analysis_descriptors.append(k)
     if len(analysis_descriptors) == 0:
-        raise HTTPError(400, 'Specify at least one search criterion when querying by audio file')
-    analysis_response = requests.post(f"{os.getenv('ANALYSIS_API')}?descriptors={','.join(analysis_descriptors)}", data=audio_content)
-    if analysis_response.status_code != 200:
-        raise HTTPError(analysis_response.status_code, analysis_response.json()['error'])
-    query_descriptors = analysis_response.json()
+        if 'embedding' not in audio_query:
+            raise HTTPError(400, 'Specify at least one search criterion when querying by audio file')
+    else:
+        analysis_response = requests.post(f"{os.getenv('ANALYSIS_API')}?descriptors={','.join(analysis_descriptors)}", data=body)
+        if analysis_response.status_code != 200:
+            raise HTTPError(analysis_response.status_code, analysis_response.json()['error'])
+        query_descriptors = analysis_response.json()
 
     text_params = {}
-    for descriptor, audio_params in audio_query.items():
-        if descriptor in ['tempo', 'tuning', 'duration']:
-            if audio_params == '':
-                text_params[descriptor] = ''
-            elif audio_params[0] in ('<', '>'):
-                text_params[descriptor] = '{}{}'.format(audio_params, query_descriptors[descriptor])
+    query_vector = []
+    for query_key, query_value in audio_query.items():
+        if query_key in ['tempo', 'tuning', 'duration']:
+            if query_value == '':
+                text_params[query_key] = ''
+            elif query_value[0] in ('<', '>'):
+                text_params[query_key] = '{}{}'.format(query_value, query_descriptors[query_key])
             else:
-                text_params[descriptor] = '{}{}'.format(query_descriptors[descriptor], audio_params)
-        elif descriptor == 'global-key':
+                text_params[query_key] = '{}{}'.format(query_descriptors[query_key], query_value)
+        elif query_key == 'global-key':
             text_params['global-key'] = query_descriptors['global-key']['key'].replace(" ", "")
-        elif descriptor == 'chords':
+        elif query_key == 'chords':
             chord_set = set([c['label'] for c in query_descriptors['chords']['chordSequence']])
             chord_set.discard('N')
-            text_params[descriptor] = '-'.join(list(chord_set))
-            if audio_params:
-                text_params[descriptor] += ',{}'.format(audio_params)
-        elif descriptor == 'dominant-mood':
-            text_params[descriptor] = max(query_descriptors['dominant-mood'], key=query_descriptors['dominant-mood'].get)
+            text_params[query_key] = '-'.join(list(chord_set))
+            if query_value:
+                text_params[query_key] += ',{}'.format(query_value)
+        elif query_key == 'dominant-mood':
+            text_params[query_key] = max(query_descriptors['dominant-mood'], key=query_descriptors['dominant-mood'].get)
+        elif query_key == 'embedding':
+            text_params[query_key] = query_value
+            if content_type == 'application/json':
+                query_vector = json.loads(body)
+            else:
+                query_vector = query_descriptors[query_value]
 
     logger.info(f'Performing textual descriptor search with {text_params}')
-    return text_params
+    return text_params, query_vector
